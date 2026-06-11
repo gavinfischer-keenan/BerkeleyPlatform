@@ -1,0 +1,18 @@
+[Unit]
+Description=Berkeley Audio Receiver (BirdNET / BatNET)
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=berkeley
+WorkingDirectory=/opt/berkeley/BerkeleyAudioReceiver
+ExecStart=/opt/berkeley/BerkeleyAudioReceiver/.venv/bin/python src/main.py
+EnvironmentFile=/opt/berkeley/BerkeleyPlatform/.env
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

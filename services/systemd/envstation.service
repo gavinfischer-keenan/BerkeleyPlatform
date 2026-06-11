@@ -1,0 +1,18 @@
+[Unit]
+Description=Berkeley Environmental Station
+After=network.target mosquitto.service influxdb.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=berkeley
+WorkingDirectory=/opt/berkeley/BerkeleyEnvironmental
+ExecStart=/opt/berkeley/BerkeleyEnvironmental/.venv/bin/python -m envstation
+EnvironmentFile=/opt/berkeley/BerkeleyPlatform/.env
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Berkeley Earthquake Prediction Engine
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=berkeley
+WorkingDirectory=/opt/berkeley/EarthquakePredictionEngine
+ExecStart=/opt/berkeley/EarthquakePredictionEngine/.venv/bin/python -m eqengine
+EnvironmentFile=/opt/berkeley/BerkeleyPlatform/.env
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

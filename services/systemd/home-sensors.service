@@ -1,0 +1,18 @@
+[Unit]
+Description=Berkeley Home Sensors (Soil, Leak, Power, Climate)
+After=network.target mosquitto.service influxdb.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=berkeley
+WorkingDirectory=/opt/berkeley/BerkeleyHomeSensors
+ExecStart=/opt/berkeley/BerkeleyHomeSensors/.venv/bin/python -m homesensors
+EnvironmentFile=/opt/berkeley/BerkeleyPlatform/.env
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

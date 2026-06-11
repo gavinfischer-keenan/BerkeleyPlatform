@@ -1,0 +1,97 @@
+services:
+  # ── Infrastructure ──────────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: berkeley-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"     # MQTT
+      - "9001:9001"     # WebSocket (for dashboard MQTT bridge)
+    volumes:
+      - ./services/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: berkeley-influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USER:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD:-berkeley2024}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-berkeley}
+      DOCKER_INFLUXDB_INIT_BUCKET: sensors-raw
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+
+  # ── AI Agents ───────────────────────────────────────────────────────
+  earthquake-engine:
+    build:
+      context: ../EarthquakePredictionEngine
+      dockerfile: Dockerfile
+    container_name: berkeley-eqengine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_ENABLED: "true"
+      MQTT_BROKER: mosquitto
+    depends_on: [mosquitto]
+    network_mode: host  # needs UDP access to Raspberry Shake
+
+  environmental-station:
+    build:
+      context: ../BerkeleyEnvironmental
+      dockerfile: Dockerfile
+    container_name: berkeley-envstation
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_BROKER: mosquitto
+      INFLUXDB_URL: http://influxdb:8086
+    depends_on: [mosquitto, influxdb]
+
+  audio-receiver:
+    build:
+      context: ../BerkeleyAudioReceiver
+      dockerfile: Dockerfile
+    container_name: berkeley-audio
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_ENABLED: "true"
+      MQTT_BROKER: mosquitto
+    depends_on: [mosquitto]
+    volumes:
+      - audio-data:/app/data/audio
+
+  home-sensors:
+    build:
+      context: ../BerkeleyHomeSensors
+      dockerfile: Dockerfile
+    container_name: berkeley-homesensors
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_BROKER: mosquitto
+      INFLUXDB_URL: http://influxdb:8086
+    depends_on: [mosquitto, influxdb]
+
+  # ── Future Services ─────────────────────────────────────────────────
+  # vision-agent:
+  #   build: ../BerkeleyVisionAgent
+  #   depends_on: [mosquitto, frigate]
+  #
+  # frigate:
+  #   image: ghcr.io/blakeblackshear/frigate:stable
+  #   depends_on: [mosquitto]
+
+volumes:
+  mosquitto-data:
+  mosquitto-log:
+  influxdb-data:
+  influxdb-config:
+  audio-data:
