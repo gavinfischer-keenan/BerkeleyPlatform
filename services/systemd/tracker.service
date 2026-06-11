@@ -1,0 +1,18 @@
+[Unit]
+Description=Berkeley Tracker (ADS-B + AIS)
+After=network.target mosquitto.service dump1090-fa.service ais-catcher.service
+Wants=mosquitto.service dump1090-fa.service ais-catcher.service
+
+[Service]
+Type=simple
+User=berkeley
+WorkingDirectory=/opt/berkeley/BerkeleyTracker
+ExecStart=/opt/berkeley/BerkeleyTracker/.venv/bin/python -m tracker
+EnvironmentFile=/opt/berkeley/BerkeleyPlatform/.env
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

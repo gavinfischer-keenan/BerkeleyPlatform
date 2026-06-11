@@ -80,6 +80,22 @@ services:
       INFLUXDB_URL: http://influxdb:8086
     depends_on: [mosquitto, influxdb]
 
+  tracker:
+    build:
+      context: ../BerkeleyTracker
+      dockerfile: Dockerfile
+    container_name: berkeley-tracker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_BROKER: mosquitto
+      INFLUXDB_URL: http://influxdb:8086
+    depends_on: [mosquitto, influxdb]
+    network_mode: host  # needs USB access to RTL-SDR dongles
+    privileged: true     # RTL-SDR USB device access
+    volumes:
+      - photo-data:/data/photos
+
   # ── Future Services ─────────────────────────────────────────────────
   # vision-agent:
   #   build: ../BerkeleyVisionAgent
@@ -95,3 +111,4 @@ volumes:
   influxdb-data:
   influxdb-config:
   audio-data:
+  photo-data:
