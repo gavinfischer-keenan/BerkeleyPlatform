@@ -11,6 +11,7 @@ A multi-agent AI platform running on a single Intel Linux box where specialized 
 | [BerkeleyEnvironmental](https://github.com/gavinfischer-keenan/BerkeleyEnvironmental) | Outdoor weather, fire, air quality | Python | `home/alerts/fire-weather` |
 | [BerkeleyAudioReceiver](https://github.com/gavinfischer-keenan/BerkeleyAudioReceiver) | BirdNET / BatNET audio analysis | Python | `home/events/bird-audio` |
 | [BerkeleyHomeSensors](https://github.com/gavinfischer-keenan/BerkeleyHomeSensors) | House infrastructure (soil, leak, power, climate) | Python | `home/sensors/house/*` |
+| [BerkeleyTracker](https://github.com/gavinfischer-keenan/BerkeleyTracker) | ADS-B + AIS aircraft & vessel tracking via SDR | Python | `home/events/tracker/*` |
 | [BerkeleyEventStore](https://github.com/gavinfischer-keenan/BerkeleyEventStore) | Shared SQLite event database | Python | N/A (library) |
 
 ## Architecture
@@ -31,7 +32,8 @@ A multi-agent AI platform running on a single Intel Linux box where specialized 
 │  ┌─ AI Agents ────────────┼──────────────────────────────────┐  │
 │  │  EarthquakePrediction  │  BerkeleyAudioReceiver           │  │
 │  │  BerkeleyEnvironmental │  BerkeleyHomeSensors             │  │
-│  │  VisionAgent (future)  │  CrossModalAI (future)           │  │
+│  │  BerkeleyTracker (SDR) │  CrossModalAI (future)           │  │
+│  │  VisionAgent (future)  │                                  │  │
 │  └────────────────────────┼──────────────────────────────────┘  │
 │                           │                                      │
 │  ┌─ Storage ──────────────┼──────────────────────────────────┐  │
@@ -59,6 +61,7 @@ git clone https://github.com/gavinfischer-keenan/EarthquakePredictionEngine.git
 git clone https://github.com/gavinfischer-keenan/BerkeleyEnvironmental.git
 git clone https://github.com/gavinfischer-keenan/BerkeleyAudioReceiver.git
 git clone https://github.com/gavinfischer-keenan/BerkeleyHomeSensors.git
+git clone https://github.com/gavinfischer-keenan/BerkeleyTracker.git
 git clone https://github.com/gavinfischer-keenan/BerkeleyEventStore.git
 
 # 3. Configure
@@ -74,6 +77,7 @@ docker compose up -d earthquake-engine
 docker compose up -d environmental-station
 docker compose up -d audio-receiver
 docker compose up -d home-sensors
+docker compose up -d tracker
 ```
 
 ## MQTT Topic Reference
