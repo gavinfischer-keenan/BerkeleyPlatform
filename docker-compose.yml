@@ -1,5 +1,5 @@
 services:
-  # ── Infrastructure ──────────────────────────────────────────────────
+  # ── Infrastructure (Node 01 — Control Plane) ─────────────────────────
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: berkeley-mosquitto
@@ -28,7 +28,40 @@ services:
       - influxdb-data:/var/lib/influxdb2
       - influxdb-config:/etc/influxdb2
 
-  # ── AI Agents ───────────────────────────────────────────────────────
+  # ── Vision / NVR (Node 01 — requires Google Coral USB TPU) ───────────
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: berkeley-frigate
+    restart: unless-stopped
+    privileged: true          # required for Coral USB and video devices
+    shm_size: "128mb"
+    environment:
+      FRIGATE_RTSP_PASSWORD: ${FRIGATE_RTSP_PASSWORD:-changeme}
+    devices:
+      - /dev/bus/usb:/dev/bus/usb   # Google Coral USB TPU
+    volumes:
+      - ./services/frigate/config.yml:/config/config.yml
+      - video-data:/media/frigate
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "5000:5000"     # Frigate web UI
+      - "8554:8554"     # RTSP re-streams
+    depends_on: [mosquitto]
+
+  # ── Voice Pipeline (Node 01) ──────────────────────────────────────────
+  # In production this runs as an LXC on Node 01's Proxmox VE instance.
+  # The stub below can be used for bare-Docker testing.
+  # wyoming-voice:
+  #   image: rhasspy/wyoming-whisper:latest
+  #   container_name: berkeley-wyoming
+  #   restart: unless-stopped
+  #   environment:
+  #     WHISPER_MODEL: base-int8
+  #   ports:
+  #     - "10300:10300"  # Wyoming protocol
+  #   depends_on: [mosquitto]
+
+  # ── AI Agents (Node 01 — Control Plane) ──────────────────────────────
   earthquake-engine:
     build:
       context: ../EarthquakePredictionEngine
@@ -96,14 +129,27 @@ services:
     volumes:
       - photo-data:/data/photos
 
-  # ── Future Services ─────────────────────────────────────────────────
+  # ── Node 02 Services (Compute Node — run separately on GFCANADA) ──────
+  # In production, Ollama and correlation agents run on Node 02 under Proxmox VE.
+  # See ARCHITECTURE.md for the full Node 02 LXC/VM layout.
+  # A separate docker-compose.node02.yml will be added to manage Node 02 services.
+  #
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: berkeley-ollama
+  #   restart: unless-stopped
+  #   runtime: nvidia          # NVIDIA container toolkit required
+  #   environment:
+  #     NVIDIA_VISIBLE_DEVICES: all
+  #   ports:
+  #     - "11434:11434"        # Ollama REST API
+  #   volumes:
+  #     - ollama-models:/root/.ollama   # 1 TB Gen 4 NVMe mount in production
+
+  # ── Future Vision Agent (Node 01) ────────────────────────────────────
   # vision-agent:
   #   build: ../BerkeleyVisionAgent
   #   depends_on: [mosquitto, frigate]
-  #
-  # frigate:
-  #   image: ghcr.io/blakeblackshear/frigate:stable
-  #   depends_on: [mosquitto]
 
 volumes:
   mosquitto-data:
@@ -112,3 +158,4 @@ volumes:
   influxdb-config:
   audio-data:
   photo-data:
+  video-data:

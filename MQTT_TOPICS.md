@@ -26,6 +26,8 @@ home/
 │   │   ├── shed
 │   │   └── ...
 │   ├── home-sensors                  ← {status, sensor_count, last_reading}
+│   ├── voice-pipeline                ← {status, wake_word_ok, whisper_ok, version}
+│   ├── ollama                        ← {status, node, models_loaded, gpu_util_pct, version}
 │   ├── vision-agent                  ← {status, active_cameras, fps} (future)
 │   └── cross-modal                   ← {status, events_correlated} (future)
 │
@@ -48,7 +50,9 @@ home/
 │       ├── soil/{zone_id}            ← {moisture_pct, raw_mv, soil_temp_c}
 │       ├── leak/{sensor_id}          ← {wet, flow_gpm, pressure_psi}
 │       ├── power/{circuit_id}        ← {watts, voltage, amps, kwh_today}
-│       └── climate/{room_id}         ← {temp_f, humidity_pct, pressure_hpa}
+│       ├── climate/{room_id}         ← {temp_f, humidity_pct, pressure_hpa}
+│       └── occupancy/{room_id}       ← {occupied, presence_confidence, sensor_id}
+│                                         ← HLK-LD2410 mmWave (ESPHome → MQTT)
 │
 └── commands/                         ← Outbound actions (QoS 1, NOT retained)
     ├── display                       ← Override dashboard: {command, severity, message}
@@ -56,6 +60,7 @@ home/
     ├── speaker-play                  ← Play audio file: {file}
     ├── homekit-scene                 ← Activate HomeKit scene: {scene}
     ├── rachio/{zone}                 ← Irrigation: {action, duration_min}
+    ├── compute-node                  ← Wake/sleep Node 02: {action, reason, requestor}
     └── camera/{cam_id}              ← PTZ control: {pan, tilt, zoom} (future)
 ```
 
@@ -106,6 +111,29 @@ All payloads are JSON. Common fields:
   "start_time": 3.0,
   "end_time": 6.2,
   "location": { "name": "Front Porch", "lat": 37.8751, "lng": -122.2697 },
+  "timestamp": 1705350000000
+}
+```
+
+### Occupancy Payload (HLK-LD2410 mmWave)
+```json
+{
+  "sensor_id": "hlk-living-room",
+  "room_id": "living-room",
+  "occupied": true,
+  "presence_confidence": 0.97,
+  "motion_energy": 42,
+  "still_energy": 18,
+  "timestamp": 1705350000000
+}
+```
+
+### Compute Node Command Payload
+```json
+{
+  "action": "wake",
+  "reason": "vacancy_detected",
+  "requestor": "home-sensors",
   "timestamp": 1705350000000
 }
 ```
