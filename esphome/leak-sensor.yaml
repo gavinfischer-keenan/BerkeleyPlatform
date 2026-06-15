@@ -1,0 +1,130 @@
+# ESPHome configuration: Drip / Leak Sensor
+# Template device — copy and substitute sensor_id, location, static_ip
+#
+# Devices: esp-leak-01 through esp-leak-10
+# Sensor ID → Location mapping:
+#   leak-kitchen-sink        → Under kitchen sink
+#   leak-kitchen-dishwasher  → Dishwasher base
+#   leak-bath1-toilet        → Bathroom 1 toilet base
+#   leak-bath1-sink          → Bathroom 1 under sink
+#   leak-bath2-toilet        → Bathroom 2 toilet base
+#   leak-bath2-sink          → Bathroom 2 under sink
+#   leak-bath3-sink          → Bathroom 3 under sink
+#   leak-water-heater        → Water heater pan
+#   leak-washing-machine     → Laundry pan
+#   leak-utility-room        → Utility / mechanical room floor
+#
+# Hardware: ESP32 (or Pi Zero W) + resistive water detection sensor pad
+# Power: USB power brick (these don't need deep sleep — instant alert required)
+#
+# MQTT topic: home/sensors/house/leak/{sensor_id}
+# Alert published by BerkeleyEnvironmental rules when wet: true
+#
+# NOTE: Use GOLD or STAINLESS probes to resist corrosion. Replace sensor pads annually.
+
+substitutions:
+  device_name: "esp-leak-kitchen-sink"   # CHANGE per device (use sensor_id as name)
+  friendly_name: "Under Kitchen Sink"
+  sensor_id: "leak-kitchen-sink"         # CHANGE per device
+  location: "Under Kitchen Sink"         # CHANGE per device
+  mqtt_broker: "192.168.1.10"
+  static_ip: "192.168.1.70"              # CHANGE per device (use 70-79 for leak sensors)
+
+esphome:
+  name: ${device_name}
+  platform: ESP32
+  board: esp32dev
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  power_save_mode: NONE    # Always-on — must alert immediately
+  manual_ip:
+    static_ip: ${static_ip}
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+
+mqtt:
+  broker: ${mqtt_broker}
+  client_id: ${device_name}
+  discovery: false
+  # Publish LWT so we know if sensor goes offline
+  will_message:
+    topic: "home/status/leak/${sensor_id}"
+    payload: '{"status": "offline"}'
+    retain: true
+
+logger:
+  level: INFO
+
+sensor:
+  - platform: adc
+    pin: GPIO34
+    name: "${friendly_name} Raw mV"
+    id: leak_raw_mv
+    unit_of_measurement: "mV"
+    update_interval: 2s
+    attenuation: 11db
+    filters:
+      - multiply: 1000    # Convert V → mV
+
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi"
+    update_interval: 60s
+
+binary_sensor:
+  # Water detected when ADC drops below ~500mV (current path through water)
+  - platform: threshold
+    lower_threshold: 500
+    name: "${friendly_name} Leak Detected"
+    id: wet_detected
+    device_class: moisture
+    sensor: leak_raw_mv
+    on_press:   # Water detected
+      then:
+        - mqtt.publish:
+            topic: "home/sensors/house/leak/${sensor_id}"
+            retain: false
+            payload: !lambda |-
+              char buf[256];
+              snprintf(buf, sizeof(buf),
+                "{\"sensor_id\":\"${sensor_id}\","
+                 "\"location\":\"${location}\","
+                 "\"wet\":true,"
+                 "\"raw_mv\":%d}",
+                (int)id(leak_raw_mv).state
+              );
+              return buf;
+    on_release:  # Water cleared
+      then:
+        - mqtt.publish:
+            topic: "home/sensors/house/leak/${sensor_id}"
+            retain: false
+            payload: !lambda |-
+              char buf[256];
+              snprintf(buf, sizeof(buf),
+                "{\"sensor_id\":\"${sensor_id}\","
+                 "\"location\":\"${location}\","
+                 "\"wet\":false,"
+                 "\"raw_mv\":%d}",
+                (int)id(leak_raw_mv).state
+              );
+              return buf;
+
+# Heartbeat every 5 minutes so we know the sensor is alive
+interval:
+  - interval: 300s
+    then:
+      - mqtt.publish:
+          topic: "home/status/leak/${sensor_id}"
+          retain: true
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+              "{\"status\":\"online\",\"wet\":%s}",
+              id(wet_detected).state ? "true" : "false"
+            );
+            return buf;

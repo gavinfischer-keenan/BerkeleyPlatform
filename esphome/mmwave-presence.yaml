@@ -1,0 +1,100 @@
+# ESPHome configuration: HLK-LD2410 mmWave Presence Sensor
+# Template device — copy and substitute room_name, static_ip, mqtt_room_id
+#
+# Devices:
+#   esp-mmwave-living  → room: living-room
+#   esp-mmwave-office  → room: office
+#   esp-mmwave-bed1    → room: bedroom-primary
+#
+# MQTT topic published: home/sensors/house/occupancy/{room_id}
+# Payload: {"sensor_id":"...", "room_id":"...", "occupied":true/false,
+#           "still_energy":N, "motion_energy":N, "timestamp":...}
+
+substitutions:
+  device_name: "esp-mmwave-living"   # CHANGE per device
+  friendly_name: "Living Room Presence"
+  room_id: "living-room"             # CHANGE per device
+  mqtt_broker: "192.168.1.10"        # Node 01 IP
+  static_ip: "192.168.1.51"          # CHANGE per device
+
+esphome:
+  name: ${device_name}
+  platform: ESP32
+  board: esp32dev
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: ${static_ip}
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+
+mqtt:
+  broker: ${mqtt_broker}
+  client_id: ${device_name}
+  discovery: false
+
+logger:
+  level: INFO
+
+# LD2410 via UART ────────────────────────────────────────────────────────────
+uart:
+  id: uart_ld2410
+  rx_pin: GPIO16
+  tx_pin: GPIO17
+  baud_rate: 256000
+  parity: NONE
+  stop_bits: 1
+
+ld2410:
+  id: ld2410_sensor
+  uart_id: uart_ld2410
+
+binary_sensor:
+  - platform: ld2410
+    has_target:
+      name: "${friendly_name} Occupancy"
+      id: occupancy
+      on_state:
+        then:
+          - mqtt.publish:
+              topic: "home/sensors/house/occupancy/${room_id}"
+              retain: false
+              payload: !lambda |-
+                char buf[256];
+                snprintf(buf, sizeof(buf),
+                  "{\"sensor_id\":\"${device_name}\","
+                   "\"room_id\":\"${room_id}\","
+                   "\"occupied\":%s,"
+                   "\"motion_energy\":%d,"
+                   "\"still_energy\":%d}",
+                  x ? "true" : "false",
+                  (int)id(motion_energy).state,
+                  (int)id(still_energy).state
+                );
+                return buf;
+    has_moving_target:
+      name: "${friendly_name} Moving Target"
+    has_still_target:
+      name: "${friendly_name} Still Target"
+
+sensor:
+  - platform: ld2410
+    moving_distance:
+      name: "${friendly_name} Moving Distance"
+    still_distance:
+      name: "${friendly_name} Still Distance"
+    moving_energy:
+      name: "${friendly_name} Motion Energy"
+      id: motion_energy
+    still_energy:
+      name: "${friendly_name} Still Energy"
+      id: still_energy
+    detection_distance:
+      name: "${friendly_name} Detection Distance"
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+    update_interval: 60s

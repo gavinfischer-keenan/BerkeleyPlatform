@@ -1,0 +1,402 @@
+# ESPHome configuration: Weather Pole
+# Device: esp-weather-pole
+# Hardware: ESP32 DevKit + weather station instruments + MQ gas sensor array
+# Power: 120V AC at pole base → Mean Well 12V + 5V DC rails
+#
+# Sensors:
+#   Weather: temperature, humidity, wind speed/direction/gust, pressure, PM2.5, UV, ozone, rain
+#   Gas (MQ series, 12V heater rail): MQ-2,3,4,5,6,7,8,9,135
+#
+# MQTT topics published:
+#   home/sensors/station/weather-pole       (batch, every 60s)
+#   home/sensors/gas/weather-pole/{type}    (each gas sensor, every 30s)
+#
+# IMPORTANT: All gas sensor heater coils require 12V DC (not 5V).
+#            The ESP32 reads the analog output voltage from each sensor.
+#            Calibration: Run each sensor in clean air for 24h before use.
+
+substitutions:
+  device_name: "esp-weather-pole"
+  friendly_name: "Weather Pole"
+  mqtt_prefix: "home/sensors"
+  station_id: "weather-pole"
+  # MQTT broker on Node 01 (Dell OptiPlex)
+  mqtt_broker: "192.168.1.10"
+  mqtt_port: "1883"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  platform: ESP32
+  board: esp32dev
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  power_save_mode: NONE    # Always-on for continuous monitoring
+  manual_ip:
+    static_ip: 192.168.1.50
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+
+mqtt:
+  broker: ${mqtt_broker}
+  port: ${mqtt_port}
+  client_id: ${device_name}
+  discovery: false         # Manual topic control — not Home Assistant native
+
+logger:
+  level: INFO
+
+# ─── I²C Bus (for BME280 pressure/temp/humidity) ──────────────────────────
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+
+# ─── SPI Bus (for some UV/ozone sensors) ──────────────────────────────────
+# Uncomment if your UV/ozone sensor uses SPI
+# spi:
+#   clk_pin: GPIO18
+#   mosi_pin: GPIO23
+#   miso_pin: GPIO19
+
+# ─── One-Wire Bus (for DS18B20 soil/ambient temp) ─────────────────────────
+one_wire:
+  - platform: gpio
+    pin: GPIO4
+
+# ─── Pulse counter (rain tipping bucket) ──────────────────────────────────
+# 0.2794mm per tip — BME280 provides ambient humidity crosscheck
+
+sensor:
+
+  # ── Uptime ────────────────────────────────────────────────────────────────
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+    id: uptime_sensor
+    update_interval: 60s
+
+  # ── Wi-Fi signal ──────────────────────────────────────────────────────────
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+    update_interval: 60s
+
+  # ── BME280: Temperature, Humidity, Pressure ───────────────────────────────
+  - platform: bme280_i2c
+    address: 0x76
+    update_interval: 30s
+    temperature:
+      name: "${friendly_name} Temperature"
+      id: temp_f
+      unit_of_measurement: "°F"
+      filters:
+        - lambda: return x * 9.0/5.0 + 32.0;  # Convert C → F
+    humidity:
+      name: "${friendly_name} Humidity"
+      id: humidity_pct
+    pressure:
+      name: "${friendly_name} Pressure"
+      id: pressure_hpa
+      unit_of_measurement: "hPa"
+
+  # ── Wind Speed (anemometer — pulse count on GPIO) ─────────────────────────
+  - platform: pulse_counter
+    pin: GPIO34
+    name: "${friendly_name} Wind Speed"
+    id: wind_speed_mph
+    unit_of_measurement: "mph"
+    update_interval: 10s
+    filters:
+      # Calibration: 1 pulse/sec = 1.492 mph (Davis anemometer formula)
+      - multiply: 1.492
+
+  # ── Wind Direction (voltage divider vane) ─────────────────────────────────
+  - platform: adc
+    pin: GPIO35
+    name: "${friendly_name} Wind Direction"
+    id: wind_direction_deg
+    unit_of_measurement: "°"
+    update_interval: 10s
+    attenuation: 11db
+    filters:
+      # Convert 0–3.3V → 0–359° (calibrate for your specific vane resistor set)
+      - calibrate_linear:
+          - 0.0  -> 0.0
+          - 3.3  -> 359.0
+
+  # ── PM2.5 (PMS5003 particle sensor via UART) ──────────────────────────────
+  # Wired to GPIO16 (RX) / GPIO17 (TX)
+  - platform: pmsx003
+    type: PMS5003
+    uart_id: uart_pms
+    pm_2_5:
+      name: "${friendly_name} PM2.5"
+      id: pm25_ugm3
+    pm_10_0:
+      name: "${friendly_name} PM10"
+      id: pm10_ugm3
+    update_interval: 60s
+
+  # ── UV Index (VEML6070 or LTR390 via I²C) ────────────────────────────────
+  - platform: ltr390
+    uv_index:
+      name: "${friendly_name} UV Index"
+      id: uv_index
+    ambient_light:
+      name: "${friendly_name} Ambient Light"
+    update_interval: 30s
+
+  # ── Ozone (MiCS-2714 or DFRobot ozone sensor via ADC) ────────────────────
+  - platform: adc
+    pin: GPIO32
+    name: "${friendly_name} Ozone"
+    id: ozone_ppb
+    unit_of_measurement: "ppb"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      # Calibration: convert ADC voltage → ppb (sensor-specific, set after calibration)
+      - calibrate_linear:
+          - 0.4  -> 0.0
+          - 2.0  -> 100.0
+
+  # ── Rain (tipping bucket) ─────────────────────────────────────────────────
+  - platform: pulse_counter
+    pin: GPIO33
+    name: "${friendly_name} Rain Rate"
+    id: rain_rate_mm_hr
+    unit_of_measurement: "mm/hr"
+    update_interval: 60s
+    filters:
+      - multiply: 0.2794   # Each tip = 0.2794mm
+
+  # ── MQ Gas Sensors (ADC inputs, 12V heater rail, 5V signal) ──────────────
+  # WARNING: Allow 24h warm-up before calibrating. Heaters draw ~150mA each.
+  # Raw ADC reading converted to approximate ppm via calibration formula.
+  # Set R0 (clean-air resistance) after field calibration for each sensor.
+
+  - platform: adc
+    pin: GPIO36   # VP
+    name: "${friendly_name} MQ-2 LPG/Smoke"
+    id: mq2_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;  // 10kΩ load resistor
+          float R0 = 9.8;                     // CALIBRATE: R0 in clean air
+          float ratio = Rs / R0;
+          return 987.99 * pow(ratio, -2.0);  // MQ-2 LPG curve
+
+  - platform: adc
+    pin: GPIO39   # VN
+    name: "${friendly_name} MQ-3 Alcohol"
+    id: mq3_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;
+          float R0 = 0.946;                   # CALIBRATE
+          float ratio = Rs / R0;
+          return 0.4 * pow(ratio, -1.431);   # MQ-3 alcohol curve
+
+  - platform: adc
+    pin: GPIO34
+    name: "${friendly_name} MQ-4 Methane"
+    id: mq4_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;
+          float R0 = 4.4;                     # CALIBRATE
+          float ratio = Rs / R0;
+          return 1012.7 * pow(ratio, -2.786); # MQ-4 methane curve
+
+  - platform: adc
+    pin: GPIO35
+    name: "${friendly_name} MQ-5 LPG/Gas"
+    id: mq5_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;
+          float R0 = 6.5;
+          float ratio = Rs / R0;
+          return 700.99 * pow(ratio, -2.0);
+
+  - platform: adc
+    pin: GPIO25
+    name: "${friendly_name} MQ-6 Butane"
+    id: mq6_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;
+          float R0 = 10.0;
+          float ratio = Rs / R0;
+          return 1000.5 * pow(ratio, -2.0);
+
+  - platform: adc
+    pin: GPIO26
+    name: "${friendly_name} MQ-7 CO"
+    id: mq7_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;
+          float R0 = 27.5;
+          float ratio = Rs / R0;
+          return 99.042 * pow(ratio, -1.518);  # MQ-7 CO curve
+
+  - platform: adc
+    pin: GPIO27
+    name: "${friendly_name} MQ-8 Hydrogen"
+    id: mq8_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;
+          float R0 = 70.0;
+          float ratio = Rs / R0;
+          return 976.97 * pow(ratio, -3.519);
+
+  - platform: adc
+    pin: GPIO14
+    name: "${friendly_name} MQ-9 CO/LPG"
+    id: mq9_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;
+          float R0 = 9.6;
+          float ratio = Rs / R0;
+          return 1000.5 * pow(ratio, -2.0);
+
+  - platform: adc
+    pin: GPIO12
+    name: "${friendly_name} MQ-135 Air Quality"
+    id: mq135_raw
+    unit_of_measurement: "ppm"
+    update_interval: 30s
+    attenuation: 11db
+    filters:
+      - lambda: |-
+          float Rs = (3.3 - x) / x * 10.0;
+          float R0 = 76.63;
+          float ratio = Rs / R0;
+          return 116.6020682 * pow(ratio, -2.769034857);
+
+# ─── UART (PMS5003 PM sensor) ─────────────────────────────────────────────
+uart:
+  - id: uart_pms
+    rx_pin: GPIO16
+    tx_pin: GPIO17
+    baud_rate: 9600
+
+# ─── MQTT Publishing via interval scripts ─────────────────────────────────
+# Publish a batch JSON to home/sensors/station/weather-pole every 60s
+# Publish individual gas readings to home/sensors/gas/weather-pole/{type} every 30s
+
+interval:
+  - interval: 60s
+    then:
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/station/${station_id}"
+          retain: false
+          payload: !lambda |-
+            char buf[512];
+            snprintf(buf, sizeof(buf),
+              "{\"station_id\":\"${station_id}\","
+              "\"uptime_s\":%d,"
+              "\"weather\":{\"temperature_f\":%.1f,\"humidity_pct\":%.1f,\"pressure_hpa\":%.1f},"
+              "\"wind\":{\"speed_mph\":%.1f,\"direction_deg\":%.0f,\"gust_mph\":0.0},"
+              "\"air\":{\"pm25_ugm3\":%.1f,\"pm10_ugm3\":%.1f,\"ozone_ppb\":%.1f,\"uv_index\":%.2f},"
+              "\"rain\":{\"rate_mm_hr\":%.1f}}",
+              (int)id(uptime_sensor).state,
+              id(temp_f).state,
+              id(humidity_pct).state,
+              id(pressure_hpa).state,
+              id(wind_speed_mph).state,
+              id(wind_direction_deg).state,
+              id(pm25_ugm3).state,
+              id(pm10_ugm3).state,
+              id(ozone_ppb).state,
+              id(uv_index).state,
+              id(rain_rate_mm_hr).state
+            );
+            return buf;
+
+  - interval: 30s
+    then:
+      # Publish each gas sensor individually
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq2"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq2\",\"ppm\":%.1f,\"alarm\":%s}", id(mq2_raw).state, id(mq2_raw).state >= 1000 ? "true" : "false");
+            return buf;
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq3"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq3\",\"ppm\":%.1f,\"alarm\":%s}", id(mq3_raw).state, id(mq3_raw).state >= 300 ? "true" : "false");
+            return buf;
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq4"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq4\",\"ppm\":%.1f,\"alarm\":%s}", id(mq4_raw).state, id(mq4_raw).state >= 1000 ? "true" : "false");
+            return buf;
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq5"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq5\",\"ppm\":%.1f,\"alarm\":%s}", id(mq5_raw).state, id(mq5_raw).state >= 1000 ? "true" : "false");
+            return buf;
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq6"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq6\",\"ppm\":%.1f,\"alarm\":%s}", id(mq6_raw).state, id(mq6_raw).state >= 1000 ? "true" : "false");
+            return buf;
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq7"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq7\",\"ppm\":%.1f,\"alarm\":%s}", id(mq7_raw).state, id(mq7_raw).state >= 50 ? "true" : "false");
+            return buf;
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq8"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq8\",\"ppm\":%.1f,\"alarm\":%s}", id(mq8_raw).state, id(mq8_raw).state >= 1000 ? "true" : "false");
+            return buf;
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq9"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq9\",\"ppm\":%.1f,\"alarm\":%s}", id(mq9_raw).state, id(mq9_raw).state >= 200 ? "true" : "false");
+            return buf;
+      - mqtt.publish:
+          topic: "${mqtt_prefix}/gas/${station_id}/mq135"
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf), "{\"sensor\":\"mq135\",\"ppm\":%.1f,\"alarm\":%s}", id(mq135_raw).state, id(mq135_raw).state >= 400 ? "true" : "false");
+            return buf;

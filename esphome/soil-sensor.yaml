@@ -1,0 +1,111 @@
+# ESPHome configuration: Capacitive Soil Moisture Sensor
+# Template device — copy and substitute zone_id, rachio_zone, static_ip
+#
+# Devices: esp-soil-01 through esp-soil-10
+# Zone mapping:
+#   soil-zone-1  → front slope upper    → Rachio zone 1
+#   soil-zone-2  → front slope lower    → Rachio zone 2
+#   soil-zone-3  → side yard left       → Rachio zone 3
+#   soil-zone-4  → side yard right      → Rachio zone 4
+#   soil-zone-5  → rear garden upper    → Rachio zone 5
+#   soil-zone-6  → rear garden lower    → Rachio zone 6
+#   soil-zone-7  → rear drip line A     → Rachio zone 7
+#   soil-zone-8  → rear drip line B     → Rachio zone 8
+#   soil-zone-9  → retaining wall       → Rachio zone 9  ← LOWER wet threshold (slope)
+#   soil-zone-10 → containers/pots      → Rachio zone 10
+#
+# Use capacitive sensors (not resistive) — resistive probes corrode quickly outdoors.
+# Recommended: STEMMA Soil Sensor (I2C) or Catnip Electronics Moisture Sensor.
+#
+# MQTT topic: home/sensors/house/soil/{zone_id}
+
+substitutions:
+  device_name: "esp-soil-01"        # CHANGE per device
+  friendly_name: "Soil Zone 1"
+  zone_id: "soil-zone-1"            # CHANGE per device
+  rachio_zone: "1"                  # CHANGE per device
+  mqtt_broker: "192.168.1.10"
+  static_ip: "192.168.1.60"         # CHANGE per device (use 60-69 for soil sensors)
+
+esphome:
+  name: ${device_name}
+  platform: ESP32
+  board: esp32dev
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: ${static_ip}
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+
+mqtt:
+  broker: ${mqtt_broker}
+  client_id: ${device_name}
+  discovery: false
+
+deep_sleep:
+  # Wake every 15 minutes to take a reading — saves battery
+  run_duration: 10s
+  sleep_duration: 15min
+
+logger:
+  level: INFO
+
+sensor:
+  # Capacitive moisture sensor on ADC
+  - platform: adc
+    pin: GPIO34
+    name: "${friendly_name} Moisture"
+    id: raw_moisture
+    unit_of_measurement: "%"
+    update_interval: 5s
+    attenuation: 11db
+    filters:
+      # Calibrate: dry_value = ADC reading in dry air, wet_value = ADC reading submerged
+      # These values are sensor-specific — calibrate each probe before deployment
+      - calibrate_linear:
+          - 2.80 -> 0.0    # Dry (in air)
+          - 1.20 -> 100.0  # Saturated (in water)
+      - clamp:
+          min_value: 0
+          max_value: 100
+
+  # Optional: DS18B20 soil temperature probe
+  - platform: dallas_temp
+    name: "${friendly_name} Soil Temp"
+    id: soil_temp_f
+    unit_of_measurement: "°F"
+    filters:
+      - lambda: return x * 9.0/5.0 + 32.0;
+
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+
+one_wire:
+  - platform: gpio
+    pin: GPIO4
+
+# Publish on wake before sleeping
+interval:
+  - interval: 5s
+    then:
+      - mqtt.publish:
+          topic: "home/sensors/house/soil/${zone_id}"
+          retain: false
+          payload: !lambda |-
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+              "{\"zone\":\"${zone_id}\","
+               "\"rachio_zone\":\"${rachio_zone}\","
+               "\"moisture_pct\":%.1f,"
+               "\"temp_f\":%.1f,"
+               "\"depth\":\"6in\"}",
+              id(raw_moisture).state,
+              id(soil_temp_f).state
+            );
+            return buf;
