@@ -21,6 +21,7 @@ engines observe, predict, and learn — feeding their intelligence to multiple c
 | [BerkeleyAudioReceiver](https://github.com/gavinfischer-keenan/BerkeleyAudioReceiver) | BirdNET / BatNET audio analysis | Python | `home/events/bird-audio` |
 | [BerkeleyHomeSensors](https://github.com/gavinfischer-keenan/BerkeleyHomeSensors) | House infrastructure (soil, leak, power, climate, occupancy) | Python | `home/sensors/house/*` |
 | [BerkeleyTracker](https://github.com/gavinfischer-keenan/BerkeleyTracker) | ADS-B + AIS aircraft & vessel tracking via SDR | Python | `home/events/tracker/*` |
+| [BerkeleyAlarms](https://github.com/gavinfischer-keenan/BerkeleyAlarms) | Centralized alarm lifecycle, Alexa TTS, repeat scheduling | Python | `home/alarms/*` |
 | [BerkeleyEventStore](https://github.com/gavinfischer-keenan/BerkeleyEventStore) | Shared SQLite event database | Python | N/A (library) |
 
 ## Architecture
@@ -103,6 +104,9 @@ docker compose up -d environmental-station
 docker compose up -d audio-receiver
 docker compose up -d home-sensors
 docker compose up -d tracker
+
+# 6. Start alarm service (depends on mosquitto being up)
+docker compose up -d alarm-service
 
 # 6. Start Frigate NVR (Node 01, requires Coral USB TPU)
 docker compose up -d frigate

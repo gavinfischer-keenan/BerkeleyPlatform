@@ -56,12 +56,16 @@ home/
 │
 └── commands/                         ← Outbound actions (QoS 1, NOT retained)
     ├── display                       ← Override dashboard: {command, severity, message}
-    ├── alexa-say                     ← Alexa TTS: {text}
+    ├── alexa-say                     ← Alexa TTS: {text, alarm_id, severity}
     ├── speaker-play                  ← Play audio file: {file}
     ├── homekit-scene                 ← Activate HomeKit scene: {scene}
     ├── rachio/{zone}                 ← Irrigation: {action, duration_min}
     ├── compute-node                  ← Wake/sleep Node 02: {action, reason, requestor}
+    ├── alarm/ack                     ← User ACK: {alarm_id}  (from UI / future mobile)
     └── camera/{cam_id}              ← PTZ control: {pan, tilt, zoom} (future)
+
+alarms/                               ← Alarm state (QoS 0, retained)
+    └── active                        ← BerkeleyAlarms: {alarms[], count}
 ```
 
 ## QoS and Retention Rules

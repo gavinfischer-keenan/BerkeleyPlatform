@@ -48,13 +48,6 @@ services:
       - "8554:8554"     # RTSP re-streams
     depends_on: [mosquitto]
 
-  # ── Voice Pipeline (Node 01) ──────────────────────────────────────────
-  # In production this runs as an LXC on Node 01's Proxmox VE instance.
-  # The stub below can be used for bare-Docker testing.
-  # wyoming-voice:
-  #   image: rhasspy/wyoming-whisper:latest
-  #   container_name: berkeley-wyoming
-  #   restart: unless-stopped
   #   environment:
   #     WHISPER_MODEL: base-int8
   #   ports:
@@ -129,6 +122,22 @@ services:
     volumes:
       - photo-data:/data/photos
 
+  # ── Alarm Service (Node 01) ───────────────────────────────────────────────
+  alarm-service:
+    build:
+      context: ../BerkeleyAlarms
+      dockerfile: Dockerfile
+    container_name: berkeley-alarms
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_BROKER: mosquitto
+    depends_on: [mosquitto]
+    ports:
+      - "8084:8084"     # Alarm Console dashboard UI
+    volumes:
+      - alarm-data:/var/lib/berkeley
+
   # ── Node 02 Services (Compute Node — run separately on GFCANADA) ──────
   # In production, Ollama and correlation agents run on Node 02 under Proxmox VE.
   # See ARCHITECTURE.md for the full Node 02 LXC/VM layout.
@@ -159,3 +168,4 @@ volumes:
   audio-data:
   photo-data:
   video-data:
+  alarm-data:

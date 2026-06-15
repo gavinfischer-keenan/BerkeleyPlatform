@@ -106,6 +106,7 @@ Each agent:
 | BerkeleyAudioReceiver | 01/Pi5 | Birds/bats | WAV archive + EventStore | LOW (informational) |
 | BerkeleyHomeSensors | 01 | House infra | InfluxDB | CRITICAL (leak) |
 | BerkeleyTracker | Pi5 | ADS-B + AIS | InfluxDB + EventStore | LOW (informational) |
+| **BerkeleyAlarms** | **01** | **All alert types** | **SQLite alarm history** | **Actuator — not a detector** |
 | VisionAgent (future) | 01 | Cameras (Frigate) | Video clips + EventStore | MEDIUM |
 | CrossModalAI (future) | 02 | Multi-modal | EventStore correlations | LOW |
 | Data Correlation Agents | 02 | Batch AI | EventStore | LOW (async) |
@@ -122,6 +123,9 @@ Node 01 — InfluxDB 2.7 (4 TB HDD)
 Node 01 — SQLite (EventStore)
 └── events.db                   ← tagged events from all agents
 
+Node 01 — SQLite (AlarmStore)
+└── alarms.db                   ← alarm history (resolved alarms)
+
 Node 01 — Local Filesystem
 ├── /data/audio/                ← archived WAV/FLAC clips
 ├── /data/seismic/              ← miniSEED waveform files
@@ -136,6 +140,7 @@ Node 02 — Local Filesystem (1 TB Gen 4 NVMe)
 | Consumer | Node | Interface | Connection |
 |----------|------|-----------|-----------|
 | BerkeleyHouse Dashboard | 01 | 4K TV | MQTT → WebSocket bridge |
+| **Alarm Console** | **01** | **Browser / 4K TV (port 8084)** | **BerkeleyAlarms REST + WebSocket** |
 | Mosswood Intelligence Briefing | 02 | Browser | Async AI analysis UI |
 | Home Assistant | 01 | iPhone / Apple Watch / Alexa | HASS automations + MQTT |
 | Alexa TTS | 01 | Voice | MQTT → `home/commands/alexa-say` |
