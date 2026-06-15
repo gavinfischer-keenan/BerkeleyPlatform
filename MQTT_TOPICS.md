@@ -7,16 +7,17 @@ Consumers subscribe with wildcards (e.g., `home/alerts/#`).
 
 ```
 home/
-├── alerts/                           ← Urgent, time-critical (QoS 1, NOT retained)
-│   ├── earthquake                    ← EQ engine: magnitude, countdown, severity
-│   ├── fire-weather                  ← envstation: Diablo wind, pre-hydration trigger
-│   ├── air-quality                   ← envstation: PM2.5/AQI threshold exceeded
-│   ├── soil-saturation               ← envstation: slope instability risk
-│   ├── heavy-rain                    ← envstation: atmospheric river detection
-│   ├── leak                          ← homesensors: CRITICAL water detected
-│   ├── power-anomaly                 ← homesensors: overcurrent, voltage issue
-│   ├── audio                         ← audio-receiver: unusual audio event
-│   └── intrusion                     ← vision-agent: unknown person (future)
+├── alerts/                          ← Agent alert dispatch (QoS 1, NOT retained — except breaker)
+│   ├── earthquake                    ← EQ Engine: {alert_id, severity, magnitude, seconds_until_s_wave}
+│   ├── leak/{sensor_id}               ← HomeSensors: {severity, data: {wet, location}}
+│   ├── smoke/{sensor_id}              ← HomeSensors/smoke detector: {severity, data: {active, location}}
+│   ├── co/{sensor_id}                 ← CO sensor: {severity, data: {ppm, active, location}}
+│   ├── co2/{sensor_id}                ← CO2 sensor: {severity, data: {ppm, active, location}}
+│   ├── breaker/{circuit_id}           ← HomeSensors (retained): {severity, data: {circuit_name, location, breaker_tripped}}
+│   ├── power/{circuit_id}             ← HomeSensors: overcurrent/voltage anomalies
+│   ├── soil/{sensor_id}               ← HomeSensors: soil moisture readings
+│   ├── climate/{sensor_id}            ← HomeSensors: comfort/mold threshold alerts
+│   └── insight/{source}               ← AI agents: low-priority informational alerts (future)
 │
 ├── status/                           ← Agent heartbeats (QoS 0, retained)
 │   ├── earthquake-engine             ← {status, uptime_s, rsam, triggers, version}
@@ -57,6 +58,9 @@ home/
 └── commands/                         ← Outbound actions (QoS 1, NOT retained)
     ├── display                       ← Override dashboard: {command, severity, message}
     ├── alexa-say                     ← Alexa TTS: {text, alarm_id, severity}
+    ├── rotating-display              ← Info display cards: {command, alarm_id, title, message, severity}
+    ├── push                          ← Mobile push: {title, message, push_priority} [future — Pushover/Gotify]
+    ├── panel                         ← Touch command panel: {command, alarm_id, ...} [future]
     ├── speaker-play                  ← Play audio file: {file}
     ├── homekit-scene                 ← Activate HomeKit scene: {scene}
     ├── rachio/{zone}                 ← Irrigation: {action, duration_min}
