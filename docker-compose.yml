@@ -138,6 +138,22 @@ services:
     volumes:
       - alarm-data:/var/lib/berkeley
 
+  # ── Message Service (Node 01) ────────────────────────────────────────────────
+  message-service:
+    build:
+      context: ../BerkeleyMessages
+      dockerfile: Dockerfile
+    container_name: berkeley-messages
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_BROKER: mosquitto
+    depends_on: [mosquitto]
+    ports:
+      - "8085:8085"     # Message Inbox UI
+    volumes:
+      - message-data:/var/lib/berkeley
+
   # ── Node 02 Services (Compute Node — run separately on GFCANADA) ──────
   # In production, Ollama and correlation agents run on Node 02 under Proxmox VE.
   # See ARCHITECTURE.md for the full Node 02 LXC/VM layout.
@@ -169,3 +185,4 @@ volumes:
   photo-data:
   video-data:
   alarm-data:
+  message-data:
