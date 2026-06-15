@@ -1,0 +1,170 @@
+# ESPHome configuration: Electrical Power Monitor (CT Clamp)
+# Template device — copy and substitute circuit_id, circuit_name, static_ip
+#
+# Devices: esp-power-01 through esp-power-06
+# Circuit mapping (from HARDWARE.md):
+#   main-panel     → Main Panel Total (service entry)
+#   hvac           → HVAC / Heat Pump
+#   kitchen        → Kitchen Circuits
+#   garage-shop    → Garage / Workshop
+#   outdoor-pole   → Weather Pole AC Feed
+#   general-house  → General House Load
+#
+# Hardware: ESP32 + SCT-013-030 split-core CT clamps (non-invasive, clamp around wire)
+#   SCT-013-030: 30A max, 1V output (no burden resistor needed, output version)
+#   For higher amperage (main panel): use SCT-013-000 (100A, needs 33Ω burden resistor)
+#
+# MQTT topic: home/sensors/house/power/{circuit_id}
+# Alert topics (published by BerkeleyEnvironmental rules):
+#   home/alerts/breaker/{circuit_id}   — breaker trip detected
+#   home/alerts/power/{circuit_id}     — overcurrent / voltage anomaly
+#
+# IMPORTANT: Never open a CT clamp while connected to a live wire without a burden
+# resistor — this will destroy the sensor. The -030 (1V output) version is safe.
+
+substitutions:
+  device_name: "esp-power-hvac"         # CHANGE per device
+  friendly_name: "HVAC Power Monitor"
+  circuit_id: "hvac"                    # CHANGE per device
+  circuit_name: "HVAC / Heat Pump"      # CHANGE per device
+  mqtt_broker: "192.168.1.10"           # Node 01 IP
+  static_ip: "192.168.1.80"            # CHANGE per device (use 80-85 for power monitors)
+  # Current transformer calibration
+  # SCT-013-030 (30A/1V): calibration = 30.0
+  # SCT-013-000 (100A/50mA): calibration ≈ 111.1 (with 33Ω burden)
+  ct_calibration: "30.0"
+  # Overcurrent alert threshold in amps (set to 80% of breaker rating)
+  overcurrent_threshold: "24.0"         # 80% of 30A breaker
+
+esphome:
+  name: ${device_name}
+  platform: ESP32
+  board: esp32dev
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  fast_connect: true
+  power_save_mode: NONE
+  manual_ip:
+    static_ip: ${static_ip}
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+
+mqtt:
+  broker: ${mqtt_broker}
+  client_id: ${device_name}
+  discovery: false
+  will_message:
+    topic: "home/status/power/${circuit_id}"
+    payload: '{"status": "offline"}'
+    retain: true
+
+logger:
+  level: INFO
+
+# ─── EmonLib-style power monitoring via ADC ───────────────────────────────
+# Uses ESPHome's ct_clamp sensor with internal ADC
+sensor:
+  # AC current from CT clamp
+  - platform: ct_clamp
+    sensor: adc_current_sensor
+    name: "${friendly_name} Current"
+    id: circuit_amps
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+    update_interval: 5s
+    calibration: ${ct_calibration}
+
+  # ADC input for CT clamp (AC-coupled — midpoint biased to VCC/2)
+  - platform: adc
+    pin: GPIO34
+    id: adc_current_sensor
+    raw: true
+    attenuation: 11db
+    update_interval: 5s
+
+  # Calculated power (assume 120V nominal — upgrade to voltage sensor if needed)
+  - platform: template
+    name: "${friendly_name} Power"
+    id: circuit_watts
+    unit_of_measurement: "W"
+    lambda: "return id(circuit_amps).state * 120.0;"
+    update_interval: 5s
+
+  # Daily energy accumulation (kWh)
+  - platform: total_daily_energy
+    name: "${friendly_name} Daily Energy"
+    id: kwh_today
+    power_id: circuit_watts
+    unit_of_measurement: "kWh"
+    accuracy_decimals: 3
+
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi"
+    update_interval: 60s
+
+# ─── Overcurrent binary sensor ────────────────────────────────────────────
+binary_sensor:
+  - platform: template
+    name: "${friendly_name} Overcurrent"
+    id: overcurrent_flag
+    device_class: problem
+    lambda: "return id(circuit_amps).state > ${overcurrent_threshold};"
+    on_press:
+      then:
+        - mqtt.publish:
+            topic: "home/alerts/power/${circuit_id}"
+            payload: !lambda |-
+              char buf[256];
+              snprintf(buf, sizeof(buf),
+                "{\"alert_type\":\"power_anomaly\","
+                 "\"severity\":\"warning\","
+                 "\"circuit_id\":\"${circuit_id}\","
+                 "\"data\":{\"circuit_name\":\"${circuit_name}\","
+                           "\"amps\":%.2f,"
+                           "\"watts\":%.0f,"
+                           "\"threshold_amps\":${overcurrent_threshold}}}",
+                id(circuit_amps).state,
+                id(circuit_watts).state
+              );
+              return buf;
+
+# ─── MQTT telemetry publish (every 30s) ───────────────────────────────────
+interval:
+  - interval: 30s
+    then:
+      - mqtt.publish:
+          topic: "home/sensors/house/power/${circuit_id}"
+          retain: false
+          payload: !lambda |-
+            char buf[384];
+            snprintf(buf, sizeof(buf),
+              "{\"circuit_id\":\"${circuit_id}\","
+               "\"circuit_name\":\"${circuit_name}\","
+               "\"amps\":%.2f,"
+               "\"watts\":%.0f,"
+               "\"voltage_v\":120.0,"
+               "\"kwh_today\":%.3f,"
+               "\"breaker_tripped\":false}",
+              id(circuit_amps).state,
+              id(circuit_watts).state,
+              id(kwh_today).state
+            );
+            return buf;
+
+  # Status heartbeat
+  - interval: 60s
+    then:
+      - mqtt.publish:
+          topic: "home/status/power/${circuit_id}"
+          retain: true
+          payload: !lambda |-
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+              "{\"status\":\"online\",\"amps\":%.2f}",
+              id(circuit_amps).state
+            );
+            return buf;
