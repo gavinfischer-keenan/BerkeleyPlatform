@@ -154,6 +154,25 @@ services:
     volumes:
       - message-data:/var/lib/berkeley
 
+  # ── Dashboard Service (Node 01) ───────────────────────────────────────────────
+  dashboard:
+    build:
+      context: ../BerkeleyDashboard
+      dockerfile: Dockerfile
+    container_name: berkeley-dashboard
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MQTT_BROKER: mosquitto
+      ALARMS_API_URL: http://alarm-service:8084
+      MESSAGES_API_URL: http://message-service:8085
+    depends_on: [mosquitto, alarm-service, message-service]
+    ports:
+      - "8090:8090"   # Internal dashboard (LAN) + Public site entry point
+    # nginx routes:
+    #   home.mosswood.internal -> all paths -> :8090
+    #   mosswood.science       -> /public/* only -> :8090
+
   # ── Node 02 Services (Compute Node — run separately on GFCANADA) ──────
   # In production, Ollama and correlation agents run on Node 02 under Proxmox VE.
   # See ARCHITECTURE.md for the full Node 02 LXC/VM layout.
