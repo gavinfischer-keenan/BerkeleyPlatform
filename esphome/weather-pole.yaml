@@ -39,18 +39,48 @@
 #   *{cs:2x}   Checksum        XOR of all bytes between $ and *
 #
 # ═══════════════════════════════════════════════════════════════════════════════
-# I²C BUS MAP
+# I²C BUS TOPOLOGY — LEVEL-SHIFTED DUAL-VOLTAGE ARCHITECTURE
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-#   bus_main (GPIO21 SDA / GPIO22 SCL) — 3.3V logic
-#   ├── 0x70  TCA9548A I2C multiplexer
-#   ├── 0x76  BME280  (temp / humidity / barometric pressure)
-#   └── 0x53  LTR390  (UV index / ambient light)
+#   [ ESP32 DevKit (3.3V logic) ]
+#            │
+#       (3.3V I²C bus: GPIO21 SDA / GPIO22 SCL)
+#            │
+#   [ DFR0843 I²C Level Shifter ]  (Low Side = 3.3V, High Side = 5V)
+#            │
+#       (5V I²C bus — main trunk)
+#            │
+#   [ 0x70 TCA9548A Multiplexer (VDD = 5V) ]
+#     ├── Channel 4 ──> 0x48 ADS1115 ADC-0  (5V)  MQ-2, MQ-3, MQ-4
+#     ├── Channel 5 ──> 0x48 ADS1115 ADC-1  (5V)  MQ-5, MQ-6, MQ-7
+#     ├── Channel 6 ──> 0x48 ADS1115 ADC-2  (5V)  MQ-8, MQ-9, MQ-135
+#     └── Channel 7 ──> [ Sub-Shifter / 3.3V Branch ]
+#                           ├── 0x76 BME280  (3.3V strict)
+#                           ├── 0x53 LTR390  (3.3V strict)
+#                           └── Future: 0x62 SCD41, 0x49 AS7262 (3.3V)
 #
-#   via TCA9548A channel 4:  0x48  ADS1115 ADC-0  (MQ-2, MQ-3, MQ-4)
-#   via TCA9548A channel 5:  0x48  ADS1115 ADC-1  (MQ-5, MQ-6, MQ-7)
-#   via TCA9548A channel 6:  0x48  ADS1115 ADC-2  (MQ-8, MQ-9, MQ-135)
-#   via TCA9548A channel 7:  RESERVED — SCD41 (0x62) + AS7262 (0x49) planned
+# CRITICAL CONSTRAINT:
+#   BME280 and LTR390 are STRICT 3.3V devices. They CANNOT live on the main
+#   5V I²C trunk. They are isolated on Channel 7 via a sub-level-shifter (or a
+#   dedicated 3.3V I²C row) that steps the 5V mux channel signal back to 3.3V
+#   before reaching those sensor inputs.
+#
+#   The TCA9548A passes through whatever voltage is driven on each channel.
+#   Channel 7 pullups are tied to 3.3V (not 5V) to enforce the lower rail.
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# I²C ADDRESS MAP (full system)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#   On 5V trunk → TCA9548A (0x70)
+#   via Channel 4:  0x48  ADS1115 ADC-0  (MQ-2, MQ-3, MQ-4)
+#   via Channel 5:  0x48  ADS1115 ADC-1  (MQ-5, MQ-6, MQ-7)
+#   via Channel 6:  0x48  ADS1115 ADC-2  (MQ-8, MQ-9, MQ-135)
+#   via Channel 7 (3.3V branch):
+#                   0x53  LTR390  (UV index, ambient light)
+#                   0x76  BME280  (temp / humidity / pressure)
+#                   0x62  SCD41   (True CO₂)          [FUTURE]
+#                   0x49  AS7262  (6-ch spectrometer)  [FUTURE]
 #
 # ═══════════════════════════════════════════════════════════════════════════════
 # MQTT TOPICS PUBLISHED
@@ -112,37 +142,39 @@ mqtt:
 logger:
   level: INFO
 
-# ─── Primary I²C Bus ──────────────────────────────────────────────────────────
+# ─── Primary I²C Bus (3.3V side of DFR0843 level shifter) ────────────────────
+# ESP32 SDA/SCL → DFR0843 Low Side (3.3V) → DFR0843 High Side (5V) → TCA9548A
+# The bus_main I²C lines operate at 3.3V on the ESP32 side only.
+# Everything beyond the level shifter (TCA9548A + channels 4/5/6) runs at 5V.
 i2c:
   - id: bus_main
     sda: GPIO21
     scl: GPIO22
-    scan: true     # At boot, logs all detected addresses — verify 0x53,0x70,0x76
+    scan: true     # At boot, logs addresses found on 5V trunk: expect 0x70 only
 
 # ─── TCA9548A I²C Multiplexer ─────────────────────────────────────────────────
-# Physical address: 0x70 (all ADDR pins A0/A1/A2 → GND)
-# Exposes 8 isolated virtual I²C buses (channels 0–7).
-# We use channels 4, 5, 6 for the three ADS1115 boards.
-# Channel 7 is reserved for SCD41 CO₂ + AS7262 6-channel spectrometer (future).
+# VDD = 5V. Sits on the HIGH side of the DFR0843 level shifter.
+# All channels 4/5/6 pass 5V logic to the ADS1115 boards.
+# Channel 7 is the 3.3V-isolated branch: a sub-level-shifter (or 3.3V pullup row)
+# steps the mux channel output down to 3.3V before reaching BME280 and LTR390.
 #
-# User notation vs 0-indexed channel number:
-#   "Channel 5" = TCA9548A channel index 4
-#   "Channel 6" = TCA9548A channel index 5
-#   "Channel 7" = TCA9548A channel index 6
-#   "Channel 8" = TCA9548A channel index 7 (reserved)
+# TCA9548A address: 0x70 (A0/A1/A2 all tied to GND).
+# Channel numbering is 0-indexed internally; user notation is 1-indexed:
+#   "Channel 5" = index 4,  "Channel 6" = index 5
+#   "Channel 7" = index 6,  "Channel 7 (3.3V branch)" = index 7
 tca9548a:
   - id: mux0
     i2c_id: bus_main
     address: 0x70
     channels:
-      - bus_id: mux_ch4     # User "Channel 5" — ADC-0 (MQ-2, MQ-3, MQ-4)
+      - bus_id: mux_ch4     # "Channel 5" — ADS1115 ADC-0 (MQ-2, MQ-3, MQ-4)  — 5V
         channel: 4
-      - bus_id: mux_ch5     # User "Channel 6" — ADC-1 (MQ-5, MQ-6, MQ-7)
+      - bus_id: mux_ch5     # "Channel 6" — ADS1115 ADC-1 (MQ-5, MQ-6, MQ-7)  — 5V
         channel: 5
-      - bus_id: mux_ch6     # User "Channel 7" — ADC-2 (MQ-8, MQ-9, MQ-135)
+      - bus_id: mux_ch6     # "Channel 7" — ADS1115 ADC-2 (MQ-8, MQ-9, MQ-135) — 5V
         channel: 6
-      - bus_id: mux_ch7     # User "Channel 8" — RESERVED (SCD41 + AS7262)
-        channel: 7
+      - bus_id: mux_ch7     # "Channel 7 (3.3V branch)" — BME280 + LTR390 + future SCD41/AS7262
+        channel: 7          # Channel 7 pullups tied to 3.3V rail (sub-shifter)
 
 # ─── ADS1115 ADC Boards (all at 0x48, isolated by TCA9548A channel) ──────────
 ads1115:
@@ -229,9 +261,10 @@ sensor:
     name: "${friendly_name} WiFi Signal"
     update_interval: 60s
 
-  # ── BME280: Primary environmental reference (on bus_main directly) ────────
+  # ── BME280: Primary environmental reference (on mux_ch7, 3.3V branch) ──────
+  # BME280 is a STRICT 3.3V device. It lives behind the sub-shifter on Channel 7.
   - platform: bme280_i2c
-    i2c_id: bus_main
+    i2c_id: mux_ch7
     address: 0x76
     update_interval: 30s
     temperature:
@@ -248,9 +281,10 @@ sensor:
       id: pressure_hpa
       unit_of_measurement: "hPa"
 
-  # ── LTR390: UV Index (on bus_main directly) ───────────────────────────────
+  # ── LTR390: UV Index (on mux_ch7, 3.3V branch) ─────────────────────────────
+  # LTR390 is a STRICT 3.3V device. Shares Channel 7 with BME280.
   - platform: ltr390
-    i2c_id: bus_main
+    i2c_id: mux_ch7
     uv_index:
       name: "${friendly_name} UV Index"
       id: uv_index
