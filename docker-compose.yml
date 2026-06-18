@@ -1,72 +1,98 @@
 services:
-  # ── Infrastructure (Node 01 — Control Plane) ─────────────────────────
+  # ══════════════════════════════════════════════════════════════════════════════
+  # INFRASTRUCTURE — Node 01 Control Plane (Dell OptiPlex SFF)
+  # Intel Core i7-8700 | 32 GB RAM | 256 GB SSD (boot) | 4 TB Surveillance HDD
+  # ══════════════════════════════════════════════════════════════════════════════
+
+  # ── MQTT Broker ──────────────────────────────────────────────────────────────
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: berkeley-mosquitto
     restart: unless-stopped
+    labels:
+      - "node=node01"
     ports:
-      - "1883:1883"     # MQTT
-      - "9001:9001"     # WebSocket (for dashboard MQTT bridge)
+      - "1883:1883"     # MQTT — ESP32 firmware + Python agents
+      - "9001:9001"     # WebSocket — BerkeleyHouse dashboard MQTT bridge
     volumes:
-      - ./services/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto-data:/mosquitto/data
-      - mosquitto-log:/mosquitto/log
+      # Config (read-only — contains password file path reference)
+      - ./services/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # Password file — generated via mosquitto_passwd before first run
+      - ./services/mosquitto/passwd:/mosquitto/config/passwd:ro
+      # Absolute host paths — telemetry survives container teardowns
+      - /opt/berkeley/mosquitto/data:/mosquitto/data
+      - /opt/berkeley/mosquitto/log:/mosquitto/log
 
+  # ── Time-Series Database ─────────────────────────────────────────────────────
   influxdb:
     image: influxdb:2.7
     container_name: berkeley-influxdb
     restart: unless-stopped
+    labels:
+      - "node=node01"
     ports:
       - "8086:8086"
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
       DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USER:-admin}
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD:-berkeley2024}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD}
       DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-berkeley}
       DOCKER_INFLUXDB_INIT_BUCKET: sensors-raw
     volumes:
-      - influxdb-data:/var/lib/influxdb2
-      - influxdb-config:/etc/influxdb2
+      # Absolute host paths on 4 TB surveillance HDD — data persists across teardowns
+      - /mnt/surveillance/influxdb/data:/var/lib/influxdb2
+      - /mnt/surveillance/influxdb/config:/etc/influxdb2
 
-  # ── Vision / NVR (Node 01 — requires Google Coral USB TPU) ───────────
+  # ── Frigate NVR — Hardware-Accelerated Vision ────────────────────────────────
+  # Dell OptiPlex SFF hardware:
+  #   Intel Quick Sync Video (i7-8700) → /dev/dri/renderD128
+  #   Google Coral USB TPU             → /dev/bus/usb
+  #   4 TB Surveillance HDD            → /mnt/surveillance/frigate
   frigate:
     image: ghcr.io/blakeblackshear/frigate:stable
     container_name: berkeley-frigate
     restart: unless-stopped
-    privileged: true          # required for Coral USB and video devices
-    shm_size: "128mb"
+    labels:
+      - "node=node01"
+    privileged: true          # required for Coral USB + DRI device access
+    shm_size: "256mb"         # increased for multi-camera Intel Quick Sync decode buffer
     environment:
-      FRIGATE_RTSP_PASSWORD: ${FRIGATE_RTSP_PASSWORD:-changeme}
+      FRIGATE_RTSP_PASSWORD: ${FRIGATE_RTSP_PASSWORD}
+      # Enable Intel Quick Sync hardware decoding via VAAPI
+      LIBVA_DRIVER_NAME: i965
     devices:
-      - /dev/bus/usb:/dev/bus/usb   # Google Coral USB TPU
+      # Intel Quick Sync Video — hardware decode/encode via VAAPI
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      # Google Coral USB TPU — object detection inference
+      - /dev/bus/usb:/dev/bus/usb
     volumes:
-      - ./services/frigate/config.yml:/config/config.yml
-      - video-data:/media/frigate
+      - ./services/frigate/config.yml:/config/config.yml:ro
+      # 4 TB Surveillance HDD — recordings, clips, snapshots
+      - /mnt/surveillance/frigate:/media/frigate
       - /etc/localtime:/etc/localtime:ro
     ports:
       - "5000:5000"     # Frigate web UI
       - "8554:8554"     # RTSP re-streams
     depends_on: [mosquitto]
 
-  #   environment:
-  #     WHISPER_MODEL: base-int8
-  #   ports:
-  #     - "10300:10300"  # Wyoming protocol
-  #   depends_on: [mosquitto]
+  # ══════════════════════════════════════════════════════════════════════════════
+  # AI AGENTS — Node 01 Control Plane
+  # ══════════════════════════════════════════════════════════════════════════════
 
-  # ── AI Agents (Node 01 — Control Plane) ──────────────────────────────
   earthquake-engine:
     build:
       context: ../EarthquakePredictionEngine
       dockerfile: Dockerfile
     container_name: berkeley-eqengine
     restart: unless-stopped
+    labels:
+      - "node=node01"
     env_file: .env
     environment:
       MQTT_ENABLED: "true"
       MQTT_BROKER: mosquitto
     depends_on: [mosquitto]
-    network_mode: host  # needs UDP access to Raspberry Shake
+    network_mode: host  # needs UDP access to Raspberry Shake on LAN
 
   environmental-station:
     build:
@@ -74,6 +100,8 @@ services:
       dockerfile: Dockerfile
     container_name: berkeley-envstation
     restart: unless-stopped
+    labels:
+      - "node=node01"
     env_file: .env
     environment:
       MQTT_BROKER: mosquitto
@@ -86,13 +114,15 @@ services:
       dockerfile: Dockerfile
     container_name: berkeley-audio
     restart: unless-stopped
+    labels:
+      - "node=node01"
     env_file: .env
     environment:
       MQTT_ENABLED: "true"
       MQTT_BROKER: mosquitto
     depends_on: [mosquitto]
     volumes:
-      - audio-data:/app/data/audio
+      - /opt/berkeley/audio:/app/data/audio
 
   home-sensors:
     build:
@@ -100,6 +130,8 @@ services:
       dockerfile: Dockerfile
     container_name: berkeley-homesensors
     restart: unless-stopped
+    labels:
+      - "node=node01"
     env_file: .env
     environment:
       MQTT_BROKER: mosquitto
@@ -112,6 +144,8 @@ services:
       dockerfile: Dockerfile
     container_name: berkeley-tracker
     restart: unless-stopped
+    labels:
+      - "node=node01"
     env_file: .env
     environment:
       MQTT_BROKER: mosquitto
@@ -120,15 +154,17 @@ services:
     network_mode: host  # needs USB access to RTL-SDR dongles
     privileged: true     # RTL-SDR USB device access
     volumes:
-      - photo-data:/data/photos
+      - /opt/berkeley/tracker/photos:/data/photos
 
-  # ── Alarm Service (Node 01) ───────────────────────────────────────────────
+  # ── Alarm Service ─────────────────────────────────────────────────────────────
   alarm-service:
     build:
       context: ../BerkeleyAlarms
       dockerfile: Dockerfile
     container_name: berkeley-alarms
     restart: unless-stopped
+    labels:
+      - "node=node01"
     env_file: .env
     environment:
       MQTT_BROKER: mosquitto
@@ -136,15 +172,17 @@ services:
     ports:
       - "8084:8084"     # Alarm Console dashboard UI
     volumes:
-      - alarm-data:/var/lib/berkeley
+      - /opt/berkeley/alarms:/var/lib/berkeley
 
-  # ── Message Service (Node 01) ────────────────────────────────────────────────
+  # ── Message Service ───────────────────────────────────────────────────────────
   message-service:
     build:
       context: ../BerkeleyMessages
       dockerfile: Dockerfile
     container_name: berkeley-messages
     restart: unless-stopped
+    labels:
+      - "node=node01"
     env_file: .env
     environment:
       MQTT_BROKER: mosquitto
@@ -152,15 +190,17 @@ services:
     ports:
       - "8085:8085"     # Message Inbox UI
     volumes:
-      - message-data:/var/lib/berkeley
+      - /opt/berkeley/messages:/var/lib/berkeley
 
-  # ── Dashboard Service (Node 01) ───────────────────────────────────────────────
+  # ── Dashboard ─────────────────────────────────────────────────────────────────
   dashboard:
     build:
       context: ../BerkeleyDashboard
       dockerfile: Dockerfile
     container_name: berkeley-dashboard
     restart: unless-stopped
+    labels:
+      - "node=node01"
     env_file: .env
     environment:
       MQTT_BROKER: mosquitto
@@ -170,38 +210,32 @@ services:
     ports:
       - "8090:8090"   # Internal dashboard (LAN) + Public site entry point
     # nginx routes:
-    #   home.mosswood.internal -> all paths -> :8090
-    #   mosswood.science       -> /public/* only -> :8090
+    #   home.mosswood.internal → all paths → :8090
+    #   mosswood.science       → /public/* only → :8090
 
-  # ── Node 02 Services (Compute Node — run separately on GFCANADA) ──────
-  # In production, Ollama and correlation agents run on Node 02 under Proxmox VE.
+  # ══════════════════════════════════════════════════════════════════════════════
+  # NODE 02 SERVICES — Compute Node (Gigabyte GFCANADA, RTX 4080 SUPER)
+  # Run separately via docker-compose.node02.yml on Node 02.
   # See ARCHITECTURE.md for the full Node 02 LXC/VM layout.
-  # A separate docker-compose.node02.yml will be added to manage Node 02 services.
+  # ══════════════════════════════════════════════════════════════════════════════
   #
   # ollama:
   #   image: ollama/ollama:latest
   #   container_name: berkeley-ollama
   #   restart: unless-stopped
-  #   runtime: nvidia          # NVIDIA container toolkit required
+  #   runtime: nvidia
   #   environment:
   #     NVIDIA_VISIBLE_DEVICES: all
   #   ports:
-  #     - "11434:11434"        # Ollama REST API
+  #     - "11434:11434"
   #   volumes:
-  #     - ollama-models:/root/.ollama   # 1 TB Gen 4 NVMe mount in production
+  #     - /mnt/nvme-ai/ollama:/root/.ollama
 
-  # ── Future Vision Agent (Node 01) ────────────────────────────────────
+  # ── Future Vision Agent (Node 01) ─────────────────────────────────────────────
   # vision-agent:
   #   build: ../BerkeleyVisionAgent
   #   depends_on: [mosquitto, frigate]
 
-volumes:
-  mosquitto-data:
-  mosquitto-log:
-  influxdb-data:
-  influxdb-config:
-  audio-data:
-  photo-data:
-  video-data:
-  alarm-data:
-  message-data:
+# Named volumes removed — all critical data now uses absolute host paths.
+# Remaining named volumes only for non-critical ephemeral state.
+volumes: {}

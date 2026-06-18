@@ -27,7 +27,7 @@ substitutions:
   friendly_name: "Under Kitchen Sink"
   sensor_id: "leak-kitchen-sink"         # CHANGE per device
   location: "Under Kitchen Sink"         # CHANGE per device
-  mqtt_broker: "192.168.1.10"
+  mqtt_broker: !secret mqtt_broker
   static_ip: "192.168.1.70"              # CHANGE per device (use 70-79 for leak sensors)
 
 esphome:

@@ -27,7 +27,7 @@ substitutions:
   friendly_name: "HVAC Power Monitor"
   circuit_id: "hvac"                    # CHANGE per device
   circuit_name: "HVAC / Heat Pump"      # CHANGE per device
-  mqtt_broker: "192.168.1.10"           # Node 01 IP
+  mqtt_broker: !secret mqtt_broker           # Node 01 IP
   static_ip: "192.168.1.80"            # CHANGE per device (use 80-85 for power monitors)
   # Current transformer calibration
   # SCT-013-030 (30A/1V): calibration = 30.0

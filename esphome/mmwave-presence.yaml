@@ -14,7 +14,7 @@ substitutions:
   device_name: "esp-mmwave-living"   # CHANGE per device
   friendly_name: "Living Room Presence"
   room_id: "living-room"             # CHANGE per device
-  mqtt_broker: "192.168.1.10"        # Node 01 IP
+  mqtt_broker: !secret mqtt_broker        # Node 01 IP
   static_ip: "192.168.1.51"          # CHANGE per device
 
 esphome:

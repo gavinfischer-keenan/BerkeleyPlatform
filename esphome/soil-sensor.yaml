@@ -24,7 +24,7 @@ substitutions:
   friendly_name: "Soil Zone 1"
   zone_id: "soil-zone-1"            # CHANGE per device
   rachio_zone: "1"                  # CHANGE per device
-  mqtt_broker: "192.168.1.10"
+  mqtt_broker: !secret mqtt_broker
   static_ip: "192.168.1.60"         # CHANGE per device (use 60-69 for soil sensors)
 
 esphome:
