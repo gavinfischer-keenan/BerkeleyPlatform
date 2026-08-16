@@ -14,55 +14,74 @@
 |-------|-------|
 | Role | Data Logger, MQTT Broker, InfluxDB, Frigate NVR, Voice Pipeline |
 | CPU | Intel Core i7-8700 (6C/12T, 3.2–4.6 GHz) |
-| RAM | 16 GB DDR4 2666 MHz (2×8 GB) |
-| Boot SSD | 256 GB NVMe/SATA SSD |
-| Storage Expansion | Internal M.2 2280 + 2.5"/3.5" SATA bays → 4 TB surveillance HDD |
+| RAM | **64 GB DDR4** (upgraded from 16 GB) |
+| Boot Drive | **2 TB M.2 NVMe** (upgraded from 256 GB SSD) |
+| Data Drive | **1 TB internal SSD** (Proxmox storage pool `local-data` — InfluxDB + Frigate recordings) |
 | GPU | Intel UHD Graphics 630 (QuickSync for Frigate) |
-| GPU Accelerator | Google Coral USB TPU (Frigate object detection) |
+| GPU Accelerator | Google Coral USB TPU (**arriving Day 2 — Frigate uses QuickSync on Day 1**) |
 | PSU | 200 W internal |
-| OS | Proxmox VE (bare-metal hypervisor) |
-| Network | Gigabit Ethernet — hardwired to main switch |
+| UPS | **CyberPower CP1500PFCLCD PFC Sinewave** (USB → NUT for clean shutdown) |
+| OS | Proxmox VE 8.x (bare-metal hypervisor) |
+| Network | **2.5GbE switch** (Ethernet — hardwired) |
 | Form Factor | Small Form Factor (SFF) |
-| Manufacture Date | 2018-06-15 |
 | Hostname | `node01` / `mosswood-ctrl` |
 
+> [!NOTE]
+> **Coral USB TPU arrives Day 2 (Monday).** Frigate uses Intel QuickSync on Day 1 only.
+
 **Services running on Node 01:**
-- Mosquitto MQTT Broker (LXC)
-- InfluxDB time-series DB (LXC)
-- Frigate NVR — 5 wired cameras (Docker, QuickSync + Coral)
-- Wyoming Voice Pipeline — openWakeWord + Faster-Whisper (LXC)
-- nginx reverse proxy (LXC)
-- BerkeleyAlarms daemon
-- BerkeleyEnvironmental / envstation daemon
-- BerkeleyHomeSensors daemon
-- EarthquakePredictionEngine daemon
+
+| Container/VM | Type | Resources (64GB budget) | Purpose |
+|-------------|------|------------------------|---------|
+| `haos` | VM | 4 vCPU, 4GB RAM, 32GB disk (NVMe) | Home Assistant OS — Rachio, Alexa, Z-Wave |
+| `mosquitto` | LXC | 1 vCPU, 512MB | MQTT Broker |
+| `influxdb` | LXC | 2 vCPU, 4GB RAM, 500GB on 1TB data SSD | Time-series DB |
+| `frigate` | Docker | 2 vCPU, 6GB RAM, QuickSync → Coral Day 2 | NVR — recordings to data SSD |
+| `wyoming` | LXC | 2 vCPU, 2GB RAM | Voice Pipeline (openWakeWord + Faster-Whisper) |
+| `nginx` | LXC | 1 vCPU, 512MB | Reverse proxy (internal + public) |
+| *overhead* | — | ~6GB | Proxmox host + ZFS ARC |
+| *headroom* | — | ~41GB free | Future services |
 
 ---
 
 ### Node 02 — The Compute Node (Gigabyte GFCANADA)
 | Field | Value |
 |-------|-------|
-| Role | AI Brain, Data Consumer, Deep Batch Analysis, Occupancy Orchestrator |
+| Role | AI Brain, Data Consumer, Deep Batch Analysis, Dashboard + API Server |
+| Motherboard | Gigabyte B650 GAMING X AX (AM5, DDR5, 3× M.2, PCIe 5.0) |
 | CPU | AMD Ryzen 7 7800X3D (8C/16T, 4.2 GHz, 3D V-Cache) |
-| RAM | 32 GB DDR5 installed → **upgrade target: 64 GB (2×32 GB kit)** |
-| Boot NVMe | ~1.8 TB NVMe (current Windows OS drive) → Linux system drive |
-| AI NVMe | 1–2 TB PCIe Gen 4 M.2 — dedicated AI model & DB buffer |
+| RAM | **64 GB DDR5** (2×32GB — upgraded from 2×16GB) |
+| Boot NVMe | Kingston SNV2S2000G 2TB (Proxmox boot — currently Windows 11) |
+| AI NVMe | **Samsung 990 Pro 2TB PCIe 4.0 M.2 2280** (AI model buffer) |
+| Data NVMe | **Samsung 9100 Pro 2TB PCIe 5.0 x4 M.2 2280** (batch processing) |
+| Total Storage | **6 TB NVMe** (3 drives, all M.2 slots populated) |
 | GPU | NVIDIA RTX 4080 SUPER (16 GB GDDR6X VRAM) |
-| iGPU | AMD Radeon integrated (486 MB) |
-| Motherboard | Gigabyte B650 GAMING X AX (AM5, DDR5, PCIe 5.0) |
-| BIOS | UEFI — Hyper-V disabled (enable for Proxmox) |
-| OS | Windows 11 Home → **migrate to Proxmox VE** |
-| Network | Gigabit Ethernet — hardwired to main switch |
+| iGPU | AMD Radeon integrated (Proxmox console) |
+| UPS | Shared CyberPower CP1500PFCLCD |
+| OS | Windows 11 Home → **migrate to Proxmox VE 8.x** (after data migration) |
+| Network | **Realtek 2.5GbE** (native on board) + WiFi 6E |
 | Hostname | `node02` / `gfcanada` |
+| **Timeline** | **Comes online AFTER Node 01 is stable** — pending data migration + hardware upgrades |
+
+**Pre-Proxmox checklist:**
+1. Migrate all personal data off current Windows install
+2. Swap RAM: remove 2×16GB UD5-6000, install 2×32GB DDR5 kit (standard DIMM)
+3. Install Samsung 990 Pro in M.2 slot 2
+4. Install Samsung 9100 Pro in M.2 slot 1 (PCIe 5.0)
+5. BIOS: Enable IOMMU/SVM, disable Hyper-V, verify 3 NVMe + 64GB detected
+6. Wipe Kingston → Install Proxmox VE 8.x
+7. Configure GPU passthrough (VFIO/IOMMU for RTX 4080 SUPER)
 
 **Services running on Node 02:**
-- Home Assistant OS (VM) — master state machine, Rachio, Alexa, Z-Wave
-- Ollama (Docker) — local LLM inference (Llama-3 8B voice + heavy batch models)
-- BerkeleyMessages dashboard
-- BerkeleyDashboard (internal + public web UI)
-- Anomaly Correlation Agent (batch, vacancy-triggered)
-- BirdNET/BatNET result consumer & ecology AI
-- Vision Language Model — LLaVA for camera snapshot analysis (batch)
+
+| Container/VM | Type | Resources (64GB budget) | Storage | Purpose |
+|-------------|------|------------------------|---------|--------|
+| `ollama` | LXC/VM | 4 vCPU, 16GB, GPU passthrough | Samsung 990 Pro | LLM inference (Llama-3 8B+) |
+| `berkeley-dashboard` | Docker | 2 vCPU, 4GB | Kingston boot | Hawaii-ported dashboard + API |
+| `correlation-agents` | Docker | 4 vCPU, 8GB | Samsung 9100 Pro | Data correlation batch |
+| `ai-garden` | Docker | 2 vCPU, 2GB | Kingston boot | Irrigation AI |
+| *overhead* | — | ~8GB | — | Proxmox + GPU driver + ZFS ARC |
+| *headroom* | — | ~26GB free | — | Future services |
 
 ---
 
@@ -331,18 +350,28 @@ MQTT:  home/events/occupancy-state {"state": "departed", "method": "voice_comman
 Internet
     │
     ▼
-ISP Router / Switch
+ISP Router / Firewall
     │
-    ├──[Ethernet]── Node 01 (Dell OptiPlex, Node01)
-    │                  └── Mosquitto MQTT Broker  ◄─── ALL sensors report here
-    │                  └── InfluxDB
-    │                  └── Frigate NVR ◄──── 5 Wired Cameras (no Wi-Fi)
-    │                  └── nginx (internal + public vhosts)
-    │
-    ├──[Ethernet]── Node 02 (GFCANADA)
-    │                  └── Home Assistant (VM)
-    │                  └── Ollama / AI Stack (Docker)
-    │                  └── BerkeleyDashboard
+    ▼
+┌─ 2.5GbE Switch ──────────────────────────────────────────────────────┐
+│  (all nodes hardwired — purchased)                                    │
+│                                                                       │
+│  ┌── CyberPower CP1500PFCLCD UPS (USB → NUT on Node 01) ──────┐     │
+│  │   Protects: Node 01, Node 02, Switch, Pi 5                  │     │
+│  └─────────────────────────────────────────────────────────────┘     │
+│                                                                       │
+│  [Ethernet]── Node 01 (Dell OptiPlex, 64GB DDR4, 2TB+1TB)
+│                  └── Mosquitto MQTT Broker  ◄─── ALL sensors report here
+│                  └── InfluxDB (500GB on 1TB data SSD)
+│                  └── Frigate NVR ◄──── 5 Wired Cameras (+ Coral Day 2)
+│                  └── Home Assistant OS (VM)
+│                  └── nginx (internal + public vhosts)
+│
+│  [Ethernet]── Node 02 (GFCANADA, 64GB DDR5, 6TB NVMe, RTX 4080S)
+│                  └── Ollama / AI Stack (Docker, GPU passthrough)
+│                  └── BerkeleyDashboard (ported Hawaii dashboard)
+│                  └── Correlation Agents + AI Garden
+│                  └── (COMES ONLINE AFTER NODE 01 STABLE)
     │
     └──[Wi-Fi]──── Pi 5 Edge (positioned high for SDR LOS)
     │                  └── 3 USB Microphones (local BirdNET/BatNET)
@@ -367,7 +396,19 @@ ISP Router / Switch
 ---
 
 ## Power Notes
+- **UPS:** CyberPower CP1500PFCLCD PFC Sinewave — USB connected to Node 01 → NUT daemon for orderly shutdown
 - **Weather pole**: 120 V AC at base → Mean Well 12 V + 5 V DC DIN-rail PSU
   - 12 V rail: MQ sensor heater coils (~150 mA each × 9 sensors = ~1.35 A)
   - 5 V rail: ESP32 + weather station instruments
   - No battery concerns — continuous power, no solar dependency
+
+---
+
+## Deferred Hardware Upgrades
+
+| Item | Current State | Target | Trigger |
+|------|--------------|--------|--------|
+| Node 01 storage expansion | 1TB data SSD | Add 4TB surveillance HDD | If recordings + InfluxDB fill 1TB |
+| Node 02 RAM expansion | 64GB DDR5 (2×32GB) | 128GB DDR5 (2×64GB) | If larger LLMs needed (70B+ params) |
+| Display | None | Dedicated always-on TV/monitor | After dashboard fully ported |
+| AirGradient ONE | Not purchased | Indoor CO2/PM2.5 sensor | After system stable |
