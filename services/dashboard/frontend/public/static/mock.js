@@ -1635,7 +1635,7 @@ function stopBottomTrafficHUD() {
 
 
 function updateHNLBox() {
-    const box = document.getElementById('hnl-status-box');
+    const box = document.getElementById('airport-status-box');
     if (!box) return;
     const apt = liveData.airport || { status: 'LOADING...', color: '#a4b0be', details: 'Awaiting data...' };
     box.style.display = 'block';
@@ -1651,7 +1651,7 @@ function updateHNLBox() {
 }
 
 function hideHNLBox() {
-    const box = document.getElementById('hnl-status-box');
+    const box = document.getElementById('airport-status-box');
     if (box) box.style.display = 'none';
 }
 
@@ -2040,7 +2040,7 @@ function transitionState() {
     // Handle view changes (Oahu vs Hawaii vs Harbor)
     const currView = state.view || 'oahu';
     if (currView !== 'waikiki') {
-        document.getElementById('map').classList.remove('waikiki-zoom');
+        document.getElementById('map').classList.remove('bay-zoom');
     }
 
     if (currView !== lastView) {
@@ -2065,7 +2065,7 @@ function transitionState() {
                 }
             }, 1900);
         } else if (currView === 'waikiki') {
-            document.getElementById('map').classList.add('waikiki-zoom');
+            document.getElementById('map').classList.add('bay-zoom');
             // Expanded by 5% from previous bounding box
             map.flyToBounds([[21.2286, -157.8420], [21.2863, -157.7175]], { animate: true, duration: 1.8 });
             setTimeout(() => {

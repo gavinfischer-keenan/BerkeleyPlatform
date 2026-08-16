@@ -1,5 +1,5 @@
 // =====================================================================
-// HONOLULU COMMAND CENTER — script.js
+// MOSSWOOD COMMAND CENTER — script.js
 // =====================================================================
 
 // --- VIEWPORT SCALING ---
@@ -13,7 +13,7 @@ window.addEventListener('resize', applyScale);
 applyScale();
 
 // --- MAP SETUP ---
-const bounds = [[20.994, -158.45], [21.75, -157.00]];
+const bounds = [[37.25, -123.20], [38.30, -121.70]];
 
 // zoomSnap: 0 allows Leaflet to compute the exact fractional zoom needed to fit
 // the 1920x1080 container without any padding or rounding.
@@ -59,31 +59,16 @@ var staticPoiLayer  = L.layerGroup().addTo(map);
 var radarLayerGroup = L.layerGroup();
 var currentLayer    = L.layerGroup();
 var windLayer       = L.layerGroup();
-var waveLayerOahu = L.tileLayer.wms('https://pae-paha.pacioos.hawaii.edu/thredds/wms/swan_oahu/SWAN_Oahu_Regional_Wave_Model_best.ncd', {
-    layers: 'shgt',
+// WMS wave model layers — PacIOOS (Hawaii-only) removed.
+// Bay Area has no equivalent free WMS wave model. Using GEBCO bathymetry instead.
+var gebcoBathymetry = L.tileLayer.wms('https://wms.gebco.net/mapserv?', {
+    layers: 'GEBCO_Latest',
     format: 'image/png',
     transparent: true,
-    opacity: 0.65,
-    colorscalerange: '0,2.5',
-    styles: 'boxfill/rainbow'
+    opacity: 0.45,
+    attribution: 'GEBCO'
 });
-var waveLayerMaui = L.tileLayer.wms('https://pae-paha.pacioos.hawaii.edu/thredds/wms/swan_maui/SWAN_Maui_Regional_Wave_Model_best.ncd', {
-    layers: 'shgt',
-    format: 'image/png',
-    transparent: true,
-    opacity: 0.65,
-    colorscalerange: '0,2.5',
-    styles: 'boxfill/rainbow'
-});
-var waveLayerKauai = L.tileLayer.wms('https://pae-paha.pacioos.hawaii.edu/thredds/wms/swan_kauai/SWAN_Kauai_Regional_Wave_Model_best.ncd', {
-    layers: 'shgt',
-    format: 'image/png',
-    transparent: true,
-    opacity: 0.65,
-    colorscalerange: '0,2.5',
-    styles: 'boxfill/rainbow'
-});
-var waveLayer = L.layerGroup([waveLayerOahu, waveLayerMaui, waveLayerKauai]);
+var waveLayer = L.layerGroup([gebcoBathymetry]);
 var buoyLayer       = L.layerGroup();
 var quakeLayer      = L.layerGroup();
 var lightningLayer  = L.layerGroup();
@@ -94,7 +79,7 @@ var alertLayer      = L.layerGroup();
 var turbulenceLayer = L.layerGroup();
 var airportLayer    = L.layerGroup();
 var tideLayer       = L.layerGroup();
-var waikikiTideLayer = L.layerGroup();
+var bayTideLayer = L.layerGroup();
 var shipLayer       = L.featureGroup();
 var hazardTextLayer = L.layerGroup();
 // Dense bathymetry — only added to map during Traffic Combined zoom-in
@@ -103,14 +88,9 @@ var superDenseDepthLayer = L.layerGroup();
 var sparseDepthLayer = L.layerGroup();
 var deepOceanAirLayer = L.featureGroup();
 
-var romsTempLayer = L.tileLayer.wms('https://pae-paha.pacioos.hawaii.edu/thredds/wms/roms_hiig/ROMS_Hawaii_Regional_Ocean_Model_best.ncd', {
-    layers: 'temp',
-    format: 'image/png',
-    transparent: true,
-    opacity: 0.65,
-    colorscalerange: '24,28',
-    styles: 'boxfill/rainbow'
-});
+// ROMS ocean temperature layer — PacIOOS (Hawaii-only) removed.
+// Disabled for Bay Area v1 — no equivalent free NorCal SST WMS.
+var romsTempLayer = L.layerGroup();
 
 // --- HAZARD TEXT LAYER SET UP LATER ---
 
@@ -139,34 +119,34 @@ function getOffsetPolygon(poly, offsetRatio) {
 
 
 function initHardcodedHazards() {
-    // Airmet Box location
-    const airmetBoxLatLng = [19.9, -158.1];
+    // Airmet Box location — positioned SW of Bay Area over Pacific approach
+    const airmetBoxLatLng = [37.3, -122.8];
     const airmetHtml = `<div style="background: rgba(232, 67, 147, 0.1); border: 1px dashed #e84393; padding: 10px; border-radius: 6px; width: 260px; color: #fff; font-size: 11px; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
         <div style="color: #e84393; font-weight: bold; font-size: 12px; margin-bottom: 4px; text-transform: uppercase;">AIRMET TANGO (Turbulence)</div>
-        <div style="color: #dfe6e9; line-height: 1.4;">Moderate turbulence below 8,000 feet.<br>Over and immediately south through west of mountains of all islands.</div>
+        <div style="color: #dfe6e9; line-height: 1.4;">Moderate turbulence below 8,000 feet.<br>Coastal ranges, SF Bay Area through Sacramento Valley.</div>
     </div>`;
     L.marker(airmetBoxLatLng, {
         pane: 'hazardPane',
         icon: L.divIcon({ className: '', html: airmetHtml, iconSize: [260, 80], iconAnchor: [0, 40] })
     }).addTo(hazardTextLayer);
 
-    // Volcano Status Box
-    const volcanoHtml = `<div style="background: rgba(0, 0, 0, 0.65); border: 1px solid #ee5253; padding: 10px; border-radius: 6px; width: 180px; color: #fff; font-size: 11px; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-        <div style="color: #ee5253; font-weight: bold; font-size: 12px; margin-bottom: 4px; text-transform: uppercase;">🌋 VOLCANO STATUS</div>
-        <div style="color: #dfe6e9; line-height: 1.4; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"><b>Kilauea:</b> ADVISORY<br><b>Mauna Loa:</b> NORMAL<br><span style="color:#a4b0be;font-size:9px;">USGS HVO Update</span></div>
+    // Fault Status Box (replaces Hawaii volcano status)
+    const faultHtml = `<div style="background: rgba(0, 0, 0, 0.65); border: 1px solid #ee5253; padding: 10px; border-radius: 6px; width: 200px; color: #fff; font-size: 11px; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+        <div style="color: #ee5253; font-weight: bold; font-size: 12px; margin-bottom: 4px; text-transform: uppercase;">⚠️ FAULT ZONES</div>
+        <div style="color: #dfe6e9; line-height: 1.4; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"><b>Hayward:</b> 0.5 mi from home<br><b>San Andreas:</b> 15 mi W<br><b>Calaveras:</b> 12 mi E<br><span style="color:#a4b0be;font-size:9px;">USGS Earthquake Hazards</span></div>
     </div>`;
-    L.marker([19.7, -155.4], {
+    L.marker([37.65, -122.10], {
         pane: 'hazardPane',
-        icon: L.divIcon({ className: '', html: volcanoHtml, iconSize: [180, 70], iconAnchor: [90, 70] })
+        icon: L.divIcon({ className: '', html: faultHtml, iconSize: [200, 80], iconAnchor: [100, 80] })
     }).addTo(hazardTextLayer);
 }
 initHardcodedHazards();
 
 
 // --- LIVE RADAR: RainViewer global mosaic (~10-min updates) ---
-// The US IEM NEXRAD mosaic (nexrad-n0q) is CONUS-only and has NO Hawaii
-// coverage, so it never showed anything here. RainViewer is global, keyless,
-// and its API returns the latest real frame timestamp each refresh.
+// RainViewer global radar mosaic — keyless, real-time frames.
+// Bay Area is covered by IEM NEXRAD too, but RainViewer gives smoother
+// global coverage and auto-picks the latest frame timestamp each refresh.
 var _radarTile = null;
 async function refreshRadar() {
     try {
@@ -178,11 +158,9 @@ async function refreshRadar() {
         const frame = past[past.length - 1];
         const url = `${j.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
         if (_radarTile) radarLayerGroup.removeLayer(_radarTile);
-        // RainViewer's global radar mosaic only serves up to z7 for the Hawaii
-        // region; above that it returns a "Zoom Level Not Supported" placeholder
-        // tile. Cap maxNativeZoom at 7 so Leaflet upscales the z7 frame across
-        // the map's z9–12 range instead of requesting unsupported tiles.
-        _radarTile = L.tileLayer(url, { pane: 'radarPane', opacity: 0.7, maxNativeZoom: 7, maxZoom: 14 });
+        // RainViewer serves higher zoom tiles for CONUS (Bay Area) than Hawaii.
+        // Cap at z8 for reliable upscaling across the map's zoom range.
+        _radarTile = L.tileLayer(url, { pane: 'radarPane', opacity: 0.7, maxNativeZoom: 8, maxZoom: 14 });
         radarLayerGroup.addLayer(_radarTile);
     } catch (e) { console.warn('Radar fetch:', e); }
 }
@@ -196,41 +174,33 @@ function makeSeededRng(seed) {
 }
 const rng = makeSeededRng(0xABCDEF42);
 
-// --- LAND MASK — polygon outlines per island so depth soundings never fall on
-// land. The Oahu outline traces the real coastline closely (north shore curve,
-// Kaneohe Bay, the Mokapu peninsula, Kailua, and the Pearl Harbor concavity) so
-// the land check (isOnLand) and the offshore distance gradient (distToShoreKm)
-// are accurate enough to drive both the dense bathymetry mask and the wind flow
-// field's deflection around the islands. Other islands are rougher. ---
+// --- LAND MASK — polygon outlines for Bay Area coastline so depth soundings
+// never fall on land. The SF Peninsula / Marin coastline is traced to drive
+// the isOnLand check and the offshore depth gradient (distToShoreKm). ---
 const ISLAND_POLYS = [
-    // Oahu (clockwise from Kaena Point)
-    [[21.575,-158.281],[21.585,-158.200],[21.591,-158.108],[21.640,-158.060],
-     [21.678,-158.040],[21.710,-157.995],[21.648,-157.922],[21.555,-157.875],
-     [21.519,-157.838],[21.480,-157.852],[21.420,-157.810],[21.460,-157.726],
-     [21.400,-157.739],[21.370,-157.700],[21.335,-157.695],[21.310,-157.650],
-     [21.268,-157.700],[21.272,-157.760],[21.252,-157.805],[21.282,-157.845],
-     [21.300,-157.875],[21.318,-157.960],[21.360,-157.960],[21.330,-157.990],
-     [21.300,-158.020],[21.297,-158.103],[21.335,-158.122],[21.390,-158.150],
-     [21.443,-158.190],[21.470,-158.220],[21.540,-158.255]],
-    // Molokai
-    [[21.21,-157.26],[21.21,-157.00],[21.17,-156.71],[21.12,-156.74],
-     [21.06,-157.00],[21.08,-157.22]],
-    // Lanai
-    [[20.92,-156.92],[20.90,-156.82],[20.82,-156.80],[20.74,-156.87],
-     [20.74,-156.95],[20.82,-157.06],[20.90,-157.02]],
-    // West Maui (only the western lobe falls within the map bounds)
-    [[21.03,-156.61],[20.98,-156.48],[20.80,-156.45],[20.80,-156.55],
-     [20.87,-156.69],[20.94,-156.70],[20.99,-156.66]],
+    // SF Peninsula + Marin coast (simplified outer coastline, clockwise from Pt Reyes)
+    [[38.10,-122.97],[38.00,-122.83],[37.92,-122.70],[37.87,-122.60],
+     [37.83,-122.51],[37.81,-122.49],[37.80,-122.47],[37.79,-122.51],
+     [37.77,-122.51],[37.75,-122.51],[37.73,-122.50],[37.71,-122.50],
+     [37.65,-122.49],[37.60,-122.49],[37.55,-122.48],[37.50,-122.45],
+     [37.45,-122.42],[37.40,-122.40],[37.40,-122.30],[37.45,-122.20],
+     [37.50,-122.15],[37.55,-122.10],[37.60,-122.05],[37.65,-122.10],
+     [37.70,-122.15],[37.75,-122.20],[37.80,-122.25],[37.85,-122.30],
+     [37.87,-122.35],[37.82,-122.38],[37.80,-122.40],[37.82,-122.42],
+     [37.85,-122.48],[37.90,-122.50],[37.95,-122.55],[38.00,-122.60],
+     [38.05,-122.70],[38.10,-122.80]],
+    // East Bay shoreline (simplified)
+    [[37.88,-122.35],[37.85,-122.30],[37.80,-122.28],[37.75,-122.25],
+     [37.70,-122.20],[37.65,-122.15],[37.60,-122.12],[37.55,-122.10],
+     [37.50,-122.08],[37.50,-122.15],[37.55,-122.20],[37.60,-122.25],
+     [37.65,-122.28],[37.70,-122.30],[37.75,-122.32],[37.80,-122.33],
+     [37.85,-122.34]],
 ];
 
 // --- POPULATE HAZARD TEXT LAYER ---
 const ISLAND_OUTLINES = {
-    'Kauai': [[22.23,-159.58],[22.22,-159.30],[22.10,-159.28],[21.90,-159.45],[21.88,-159.70],[22.05,-159.80]],
-    'Oahu': ISLAND_POLYS[0],
-    'Molokai': ISLAND_POLYS[1],
-    'Lanai': ISLAND_POLYS[2],
-    'Maui': [[21.03,-156.61],[20.94,-156.30],[20.91,-156.20],[20.76,-155.98],[20.65,-156.10],[20.58,-156.40],[20.75,-156.45],[20.80,-156.55],[20.99,-156.66]],
-    'Hawaii': [[20.25,-155.9],[20.1,-155.1],[19.7,-154.8],[19.3,-155.0],[18.9,-155.6],[19.1,-156.0],[19.7,-156.1]]
+    'SF Peninsula': ISLAND_POLYS[0],
+    'East Bay': ISLAND_POLYS[1],
 };
 function pointInPoly(lat, lng, poly) {
     let inside = false;
@@ -248,9 +218,9 @@ function isOnLand(lat, lng) {
     return false;
 }
 // Approx squared distance from a point to a segment, using a local equirectangular plane
-// (1° lat ≈ 111 km, 1° lng ≈ 102 km at ~21°N).
+// (1° lat ≈ 111 km, 1° lng ≈ 87.5 km at ~38°N).
 function _segKmSq(lat, lng, a, b) {
-    const KX = 102, KY = 111;
+    const KX = 87.5, KY = 111;
     const px = lng * KX, py = lat * KY;
     const ax = a[1] * KX, ay = a[0] * KY;
     const bx = b[1] * KX, by = b[0] * KY;
@@ -278,12 +248,12 @@ function distToShoreKm(lat, lng) {
 
 
 // =====================================================================
-// DENSE BATHYMETRY — zoomed south-Oahu traffic view (~zoom 12)
+// DENSE BATHYMETRY — zoomed Golden Gate / Bay entrance (~zoom 12)
 // Much finer 0.022° grid with near-shore shelf gradient
 // =====================================================================
 const rngD = makeSeededRng(0xC0FFEE99);
-for (let lat = 21.15; lat <= 21.42; lat += 0.022) {
-    for (let lng = -158.12; lng <= -157.55; lng += 0.028) {
+for (let lat = 37.60; lat <= 37.90; lat += 0.022) {
+    for (let lng = -122.70; lng <= -122.35; lng += 0.028) {
         const jLat = lat + (rngD() - 0.5) * 0.010;
         const jLng = lng + (rngD() - 0.5) * 0.014;
         if (isOnLand(jLat, jLng)) continue;
@@ -291,13 +261,13 @@ for (let lat = 21.15; lat <= 21.42; lat += 0.022) {
         // Use true distance to the nearest coastline for the depth gradient
         const kmOff = distToShoreKm(jLat, jLng);
         let depth;
-        // Authentic Oahu bathymetry profile (steep volcanic drop-off)
-        // Matching NOAA Chart 19362 & 19357 depth soundings
-        if (kmOff < 1)         depth = 10 + kmOff * 80;            // 0-1km: 10-90 ft
-        else if (kmOff < 3)    depth = 90 + (kmOff - 1) * 350;     // 1-3km: 90-790 ft (15-130 fm)
-        else if (kmOff < 8)    depth = 790 + (kmOff - 3) * 350;    // 3-8km: 790-2540 ft (130-420 fm)
-        else if (kmOff < 20)   depth = 2540 + (kmOff - 8) * 250;   // 8-20km: 2540-5540 ft (420-920 fm)
-        else                   depth = 5540 + (kmOff - 20) * 150;  // 20+km: 5540+ ft (920+ fm)
+        // NorCal continental shelf profile (gradual slope, not volcanic)
+        // Based on NOAA Chart 18649 (Farallon Islands to Bay entrance)
+        if (kmOff < 1)         depth = 8 + kmOff * 40;             // 0-1km: 8-48 ft
+        else if (kmOff < 5)    depth = 48 + (kmOff - 1) * 60;      // 1-5km: 48-288 ft (8-48 fm)
+        else if (kmOff < 15)   depth = 288 + (kmOff - 5) * 80;     // 5-15km: 288-1088 ft (48-181 fm)
+        else if (kmOff < 40)   depth = 1088 + (kmOff - 15) * 40;   // 15-40km: 1088-2088 ft (shelf edge)
+        else                   depth = 2088 + (kmOff - 40) * 100;  // 40+km: 2088+ ft (off shelf)
 
         // Add randomized variation for rugged seafloor terrain
         depth += (rngD() - 0.5) * (depth * 0.20); 
@@ -317,12 +287,12 @@ for (let lat = 21.15; lat <= 21.42; lat += 0.022) {
 }
 
 // =====================================================================
-// SUPER DENSE BATHYMETRY - super zoomed Waikiki view
+// SUPER DENSE BATHYMETRY - super zoomed Golden Gate / Bay Bridge view
 // =====================================================================
 const rngSD = makeSeededRng(0xBEEFCAFE);
 
-for (let lat = 21.19; lat <= 21.33; lat += 0.005) {
-    for (let lng = -157.89; lng <= -157.66; lng += 0.006) {
+for (let lat = 37.78; lat <= 37.86; lat += 0.005) {
+    for (let lng = -122.55; lng <= -122.38; lng += 0.006) {
         const jLat = lat + (rngSD() - 0.5) * 0.002;
         const jLng = lng + (rngSD() - 0.5) * 0.003;
         if (isOnLand(jLat, jLng)) continue;
@@ -354,8 +324,8 @@ for (let lat = 21.19; lat <= 21.33; lat += 0.005) {
 // =====================================================================
 const rngSparse = makeSeededRng(0xDEADBEEF);
 
-for (let lat = 18.5; lat <= 22.5; lat += 0.15) {
-    for (let lng = -160.5; lng <= -154.5; lng += 0.15) {
+for (let lat = 37.25; lat <= 38.30; lat += 0.15) {
+    for (let lng = -123.20; lng <= -121.70; lng += 0.15) {
         const jLat = lat + (rngSparse() - 0.5) * 0.05;
         const jLng = lng + (rngSparse() - 0.5) * 0.05;
         if (isOnLand(jLat, jLng)) continue;
@@ -404,12 +374,12 @@ var staticPoiMarkers = [];
 // STATIC AIRPORTS (only shown on Traffic views)
 // =====================================================================
 [
-    { c: [21.326, -157.922], n: "🛫 HNL" },
-    { c: [21.307, -158.070], n: "🛫 JRF" },
-    { c: [21.152, -157.096], n: "🛫 MKK" },
-    { c: [20.785, -156.951], n: "🛫 LNY" },
-    { c: [20.898, -156.430], n: "🛫 OGG" },
-    { c: [20.963, -156.673], n: "🛫 JHM" }
+    { c: [37.621, -122.379], n: "🛫 SFO" },
+    { c: [37.721, -122.221], n: "🛫 OAK" },
+    { c: [37.362, -121.929], n: "🛫 SJC" },
+    { c: [37.513, -122.250], n: "🛫 SQL" },
+    { c: [37.416, -122.049], n: "🛫 NUQ" },
+    { c: [37.990, -122.057], n: "🛫 CCR" }
 ].forEach(a => {
     L.marker(a.c, { pane: 'poiPane',
         icon: L.divIcon({ className: 'poi-label', html: a.n, iconSize: [80, 20] })
@@ -421,14 +391,14 @@ var staticPoiMarkers = [];
 // =====================================================================
 // Coordinates adjusted so each marker sits at the beach, not offshore.
 const surfSpots = [
-    { c: [21.666, -158.037], name: "Sunset",    buoyId: "51201", cssScale: 0.85, scale: 1.5, nudge: [0, 65] }, // Top (shifted UP)
-    { c: [21.664, -158.053], name: "Pipeline",  buoyId: "51201", cssScale: 0.85, scale: 1.2, nudge: [0, 0] },  // Middle (centered)
-    { c: [21.643, -158.064], name: "Waimea",    buoyId: "51201", cssScale: 0.85, scale: 1.0, nudge: [0, -65] }, // Bottom (shifted DOWN)
-    { c: [21.474, -158.219], name: "Makaha",    buoyId: "51212", cssScale: 0.85, scale: 0.8, nudge: [55, 0] },        // Left
-    { c: [21.275, -157.828], name: "Waikiki",   buoyId: "51211", cssScale: 0.80, scale: 0.5, nudge: [0, -18] },              // Directly on dot
-    { c: [21.286, -157.671], name: "Sandy's",   buoyId: "51211", cssScale: 0.85, scale: 0.6, nudge: [0, 10] },              // Right
-    { c: [21.196, -157.254], name: "Kepuhi",    buoyId: "51204", cssScale: 0.85, scale: 1.0 },
-    { c: [21.158, -156.720], name: "Halawa",    buoyId: "51202", cssScale: 0.85, scale: 1.0 },
+    { c: [37.495, -122.497], name: "Mavericks",    buoyId: "46012", cssScale: 0.85, scale: 1.5, nudge: [0, 65] },
+    { c: [37.769, -122.511], name: "Ocean Beach",   buoyId: "46026", cssScale: 0.85, scale: 1.2, nudge: [0, 0] },
+    { c: [37.593, -122.490], name: "Pacifica",      buoyId: "46012", cssScale: 0.85, scale: 1.0, nudge: [0, -65] },
+    { c: [37.896, -122.622], name: "Bolinas",       buoyId: "46214", cssScale: 0.85, scale: 0.8, nudge: [55, 0] },
+    { c: [37.835, -122.509], name: "Fort Point",    buoyId: "46237", cssScale: 0.80, scale: 0.5, nudge: [0, -18] },
+    { c: [38.314, -123.023], name: "Salmon Creek",  buoyId: "46013", cssScale: 0.85, scale: 0.6, nudge: [0, 10] },
+    { c: [37.658, -122.494], name: "Linda Mar",     buoyId: "46012", cssScale: 0.85, scale: 1.0 },
+    { c: [36.952, -122.026], name: "Steamer Lane",  buoyId: "46012", cssScale: 0.85, scale: 1.0 },
 ];
 
 var surfMarkers = [];
@@ -669,6 +639,7 @@ function updateSurfLabels(buoys) {
 // =====================================================================
 // WIND VECTORS — populated live from PacIOOS WRF ERDDAP
 async function fetchWind() {
+    return; // No NorCal ERDDAP equivalent currently
     try {
         const r = await fetch("https://pae-paha.pacioos.hawaii.edu/erddap/griddap/wrf_hi.json?Uwind[(last)][(18.5):3:(22.5)][(-160.5):3:(-154.5)],Vwind[(last)][(18.5):3:(22.5)][(-160.5):3:(-154.5)]");
         if (!r.ok) throw new Error(r.status);
@@ -1005,9 +976,8 @@ async function fetchQuakes() {
 
         quakeLayer.clearLayers();
         data.quakes.forEach(q => {
-            // Whole Hawaiian chain — most quakes cluster on the Big Island
-            // (lat ~19), which the old 20.3 cutoff wrongly excluded entirely.
-            if (q.lat < 18.5 || q.lat > 23 || q.lng < -161 || q.lng > -154) return;
+            // Bay Area — most quakes cluster on the Hayward/Calaveras faults
+            if (q.lat < 36.5 || q.lat > 39.0 || q.lng < -124.0 || q.lng > -121.0) return;
             const color  = q.mag >= 3 ? '#ee5253' : q.mag >= 2 ? '#ff9f43' : '#ffd32a';
             const size   = Math.max(22, Math.round(q.mag * 18));
             L.marker([q.lat, q.lng], {
@@ -1040,7 +1010,7 @@ async function fetchAlerts() {
         alertLayer.clearLayers();
         dynamicAlertMarkers.clearLayers();
 
-        let islandHazardCount = { 'Kauai': 0, 'Oahu': 0, 'Molokai': 0, 'Lanai': 0, 'Maui': 0, 'Hawaii': 0 };
+        let islandHazardCount = { 'SF Peninsula': 0, 'East Bay': 0 };
 
         const alertGroups = {};
         (liveData.alerts.alerts || []).forEach(a => {
@@ -1076,9 +1046,11 @@ async function fetchAlerts() {
                     if (fullText.includes(isl.toLowerCase())) affectedIslands.add(isl);
                 }
                 
-                if (fullText.includes('big island')) affectedIslands.add('Hawaii');
+                if (fullText.includes('hayward')) affectedIslands.add('Hayward');
+                if (fullText.includes('calaveras')) affectedIslands.add('Calaveras');
+                if (fullText.includes('san andreas')) affectedIslands.add('San Andreas');
                 
-                if (affectedIslands.size === 0 && fullText.includes('hawaii')) {
+                if (affectedIslands.size === 0 && fullText.includes('california')) {
                     Object.keys(ISLAND_OUTLINES).forEach(i => affectedIslands.add(i));
                 }
 
@@ -1092,17 +1064,17 @@ async function fetchAlerts() {
 
                     // Label Location (roughly South-West of each island)
                     let labelLat = polyCoords[0][0] - 0.05, labelLng = polyCoords[0][1] - 0.05;
-                    if (isl === 'Oahu') { labelLat = 21.252; labelLng = -157.805; }
+                    if (isl === 'SF Peninsula') { labelLat = 37.80; labelLng = -122.30; }
                     
-                    if (isl === 'Oahu') {
+                    if (isl === 'SF Peninsula') {
                         // Detailed box for Oahu
-                        const boxLat = 20.6 - (count * 0.25);
-                        const boxLng = -158.1;
+                        const boxLat = 37.5 - (count * 0.25);
+                        const boxLng = -122.8;
                         L.polyline([[labelLat, labelLng], [boxLat, boxLng]], { color: color, weight: 1.5, dashArray: '4,4', opacity: 0.8, pane: 'hazardPane' }).addTo(dynamicAlertMarkers);
                         
                         const html = `<div style="background: rgba(255, 255, 255, 0.85); border: 2px solid ${color}; padding: 10px; border-radius: 6px; width: 260px; color: #000; font-size: 11px; backdrop-filter: blur(6px); box-shadow: 0 4px 12px rgba(0,0,0,0.6);">
                             <div style="color: ${color}; font-weight: 900; font-size: 12px; margin-bottom: 6px; text-transform: uppercase; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">${eName}</div>
-                            <div style="color: #000000; font-weight: bold; line-height: 1.4; max-height: 150px; overflow-y: auto;">Oahu / Hawaiian Waters<br><br>${eDesc.substring(0, 400)}${eDesc.length > 400 ? '...' : ''}</div>
+                            <div style="color: #000000; font-weight: bold; line-height: 1.4; max-height: 150px; overflow-y: auto;">Bay Area / NorCal<br><br>${eDesc.substring(0, 400)}${eDesc.length > 400 ? '...' : ''}</div>
                         </div>`;
                         L.marker([boxLat, boxLng], {
                             pane: 'hazardPane',
@@ -1179,15 +1151,15 @@ async function fetchAirQuality() {
     } catch(e) { console.warn('AQI fetch:', e); }
 }
 
-// "?"?"? 7-Day Waikiki Surf Forecast (Open-Meteo Marine API)
-async function fetchWaikikiSurfForecast() {
+// 🌊 7-Day Bay Area Surf Forecast (Open-Meteo Marine API)
+async function fetchBaySurfForecast() {
     try {
-        const url = 'https://marine-api.open-meteo.com/v1/marine?latitude=21.27&longitude=-157.82&daily=wave_height_max&timezone=Pacific%2FHonolulu';
+        const url = 'https://marine-api.open-meteo.com/v1/marine?latitude=37.70&longitude=-122.51&daily=wave_height_max&timezone=America%2FLos_Angeles';
         const r = await fetch(url);
         if (!r.ok) throw new Error(r.status);
         const data = await r.json();
-        liveData.waikikiSurf = data;
-    } catch(e) { console.warn('Waikiki surf fetch:', e); }
+        liveData.baySurf = data;
+    } catch(e) { console.warn('Bay surf fetch:', e); }
 }
 
 async function fetch7DayForecast() {
@@ -1382,7 +1354,7 @@ async function fetchCurrents() {
     } catch(e) { console.warn('Currents fetch:', e); }
 }
 
-// ─── Tide state for Hawaiian Islands (NOAA CO-OPS via /api/tide)
+// ─── Tide state for San Francisco Bay Area (NOAA CO-OPS via /api/tide)
 async function fetchTide() {
     try {
         const r = await fetch('/api/tide');
@@ -1391,7 +1363,7 @@ async function fetchTide() {
         liveData.tide = data;
 
         tideLayer.clearLayers();
-        waikikiTideLayer.clearLayers();
+        bayTideLayer.clearLayers();
         tideMarkers = [];
         (data.tides || []).forEach(t => {
             const updown = t.state === 'Rising' ? '▲' : (t.state === 'Falling' ? '▼' : '–');
@@ -1410,7 +1382,7 @@ async function fetchTide() {
             if (t.id === '1612668') { angle = -Math.PI * 0.65; rOff = 150; } // Haleiwa more North, slightly West
             if (t.id === '1612480') { angle = -Math.PI / 4; rOff = 140; } // Kaneohe North-East
             if (t.id === '1612424') { angle = Math.PI; rOff = 160; } // Waianae West
-            if (t.id === '1612340') { angle = Math.PI * 0.75; rOff = 200; } // Honolulu heavily South-West
+            if (t.id === '1612340') { angle = Math.PI * 0.75; rOff = 200; } // SF station offset SW
             if (t.id === '1613198') { angle = Math.PI / 2; rOff = 140; } // Kaunakakai South
 
             const marker = L.marker(t.coords, { pane: 'poiPane',
@@ -1418,10 +1390,10 @@ async function fetchTide() {
             }).addTo(tideLayer);
             tideMarkers.push({ marker, html, color, angle, rOff });
 
-            if (t.id === '1612340' || (t.name && t.name.includes('Honolulu'))) {
-                L.marker([21.288, -157.842], { pane: 'poiPane',
+            if (t.id === '1612340' || (t.name && t.name.includes('Berkeley'))) {
+                L.marker([37.868, -122.316], { pane: 'poiPane',
                     icon: L.divIcon({ className: '', html, iconSize: [120, 48], iconAnchor: [60, 24] })
-                }).addTo(waikikiTideLayer);
+                }).addTo(bayTideLayer);
             }
         });
         declutterLabels();
@@ -1475,7 +1447,7 @@ function renderBuoyItem(item) {
 function getQuakeItems() {
     return (liveData.quakes || []).map(q => {
         const color = q.mag >= 3 ? '#ee5253' : q.mag >= 2 ? '#ff9f43' : '#ffd32a';
-        const place = q.place.replace(/,?\s*Hawaii( Island)?$/, '');
+        const place = q.place.replace(/,?\s*California$/, '');
         return { mag: q.mag, place, depth: q.depth, time: q.time, color };
     });
 }
@@ -1500,9 +1472,9 @@ function getAviationItems() {
     });
     if (real.length) return real;
     return [
-        { call:'HAL12',  type:'✈️', route:'HNL ➔ LAX', alt:'FL310',  spd:'475 kts', isDeepOcean: false, origin: 'HNL', dest: 'LAX' },
+        { call:'HAL12',  type:'✈️', route:'SFO ➔ LAX', alt:'FL310',  spd:'475 kts', isDeepOcean: false, origin: 'SFO', dest: 'LAX' },
         { call:'SWA453', type:'✈️', route:'OAK ➔ HNL', alt:'4,200ft',spd:'180 kts', isDeepOcean: false, origin: 'OAK', dest: 'HNL' },
-        { call:'UAL930', type:'✈️', route:'HNL ➔ ORD', alt:'FL240',  spd:'Climbing', isDeepOcean: true, origin: 'HNL', dest: 'ORD' }, // Fake deep ocean for testing if offline
+        { call:'UAL930', type:'✈️', route:'SFO ➔ ORD', alt:'FL240',  spd:'Climbing', isDeepOcean: true, origin: 'SFO', dest: 'ORD' }, // Fake deep ocean for testing if offline
         { call:'TOUR01', type:'🚁', route:'Local Tour', alt:'700ft',  spd:'95 kts', isDeepOcean: false, origin: null, dest: null },
         { call:'USCG65', type:'🚁', route:'SAR Patrol', alt:'250ft',  spd:'120 kts', isDeepOcean: false, origin: null, dest: null },
         { call:'BLUE-H', type:'🚁', route:'Scenic Tour',alt:'900ft',  spd:'80 kts', isDeepOcean: false, origin: null, dest: null },
@@ -1510,11 +1482,11 @@ function getAviationItems() {
 }
 
 function getDeepOceanFlightItems() {
-    const hawaiiIata = ['HNL','OGG','KOA','ITO','LIH','LNY','JHM','MKK','HNM'];
+    const bayAreaIata = ['SFO','OAK','SJC','SMF','STS','CCR','SQL','PAO','HWD','LVK','NUQ'];
     let flights = getAviationItems().filter(a => {
         if (!a.origin || !a.dest) return false;
-        const isToFromHNL = a.origin === 'HNL' || a.dest === 'HNL';
-        const isMainland = !hawaiiIata.includes(a.origin) || !hawaiiIata.includes(a.dest);
+        const isToFromHNL = a.origin === 'SFO' || a.dest === 'SFO';
+        const isMainland = !bayAreaIata.includes(a.origin) || !bayAreaIata.includes(a.dest);
         return isToFromHNL && isMainland;
     });
     
@@ -1568,9 +1540,9 @@ function shipTypeLabel(t) {
 // Helper to check if a vessel is likely in port/harbor
 function isVesselInPort(v) {
     if (v.sog != null && v.sog >= 1.0) return false;
-    const hDist = Math.hypot((v.lat - 21.305)*111, (v.lng - -157.867)*102); // Honolulu
-    const pDist = Math.hypot((v.lat - 21.350)*111, (v.lng - -157.960)*102); // Pearl Harbor
-    const bDist = Math.hypot((v.lat - 21.300)*111, (v.lng - -158.110)*102); // Kalaeloa
+    const hDist = Math.hypot((v.lat - 37.88)*111, (v.lng - -122.26)*87); // Distance from Berkeley
+    const pDist = Math.hypot((v.lat - 37.80)*111, (v.lng - -122.28)*87); // Distance from Oakland port
+    const bDist = Math.hypot((v.lat - 37.81)*111, (v.lng - -122.41)*87); // Distance from SF
     return hDist < 2.5 || pDist < 4.0 || bDist < 2.5;
 }
 
@@ -1604,7 +1576,7 @@ function getTrafficItems() {
     return items;
 }
 
-function getWaikikiTrafficItems() {
+function getBayTrafficItems() {
     const items = [];
     // Tightly match the map zoom bounds (Ala Wai Harbor to past Diamond Head)
     const b = L.latLngBounds([21.200, -157.880], [21.320, -157.670]);
@@ -1661,7 +1633,7 @@ function isInHarbor(lat, lng) {
     return (lat >= 21.282 && lat <= 21.288 && lng >= -157.844 && lng <= -157.838);
 }
 
-function renderWaikikiTrafficCard(item) {
+function renderBayTrafficCard(item) {
     const raw = item.raw || {};
     const imgUrl = raw.image_url;
     const visits = raw.visit_count || 1;
@@ -1701,7 +1673,7 @@ function getShipItems() {
         .map(v => ({
             name: v.name,
             type: shipTypeLabel(v.type),
-            area: v.dest ? `→ ${v.dest}` : 'Hawaiian waters',
+            area: v.dest ? `→ ${v.dest}` : 'Bay Area waters',
             spd: v.sog != null ? `${v.sog.toFixed(1)} kt` : '--'
         }));
 }
@@ -1795,7 +1767,7 @@ function stopBottomTrafficHUD() {
 
 
 function updateHNLBox() {
-    const box = document.getElementById('hnl-status-box');
+    const box = document.getElementById('airport-status-box');
     if (!box) return;
     const apt = liveData.airport || { status: 'LOADING...', color: '#a4b0be', details: 'Awaiting data...' };
     box.style.display = 'block';
@@ -1811,12 +1783,12 @@ function updateHNLBox() {
 }
 
 function hideHNLBox() {
-    const box = document.getElementById('hnl-status-box');
+    const box = document.getElementById('airport-status-box');
     if (box) box.style.display = 'none';
 }
 
 function updateHNLBoxMet() {
-    const box = document.getElementById('hnl-status-box-met');
+    const box = document.getElementById('airport-status-box-met');
     if (!box) return;
     const apt = liveData.airport || { status: 'LOADING...', color: '#a4b0be', details: 'Awaiting data...' };
     box.style.display = 'flex';
@@ -1835,7 +1807,7 @@ function updateHNLBoxMet() {
 }
 
 function hideHNLBoxMet() {
-    const box = document.getElementById('hnl-status-box-met');
+    const box = document.getElementById('airport-status-box-met');
     if (box) box.style.display = 'none';
 }
 
@@ -1870,7 +1842,7 @@ function updateLegend(type) {
         html = `
             <div style="margin-bottom:12px;">
                 <div style="font-weight:bold; font-size:11px; color:#4facfe; text-transform:uppercase; margin-bottom:4px;">BASE REFLECTIVITY RADAR</div>
-                <div style="font-size:9.5px; color:#dfe6e9; margin-bottom:4px;"><b>Source: NWS Hawaii Regional Radar</b></div>
+                <div style="font-size:9.5px; color:#dfe6e9; margin-bottom:4px;"><b>Source: NWS Bay Area Regional Radar</b></div>
                 <div style="font-size:9.5px; color:#b2bec3; line-height:1.3; margin-bottom:8px;">Color indicates precipitation intensity (dBZ).</div>
                 <div style="height:6px; width:100%; border-radius:3px; background: linear-gradient(to right, #00FF00, #FFFF00, #FF0000, #FF00FF, #FFFFFF);"></div>
                 <div style="display:flex; justify-content:space-between; font-size:10px; color:#b2bec3; margin-top:2px;"><span>Light</span><span>Moderate</span><span>Heavy</span><span>Extreme</span></div>
@@ -1994,7 +1966,7 @@ const uiStates = [
             });
             const peakStr = peakHi > 0 ? `${peakHi}ft` : '--';
             const peakColor = peakHi > 6 ? '#ff9f43' : '#1dd1a1';
-            // Condensed Buoy 51211 (Pearl Harbor / Koko)
+            // Condensed Buoy 51211 (Oakland Estuary)
             const b51211 = active.find(b => b.id === '51211');
             let buoyDataHtml = '';
             if (b51211) {
@@ -2005,7 +1977,7 @@ const uiStates = [
                 const wt = b51211.waterTemp != null ? `${cToF(b51211.waterTemp)}°F` : '--';
                 const pr = b51211.pressure != null ? `${b51211.pressure}mb` : '--';
                 buoyDataHtml = `<div style="margin-top:10px; padding:6px; background:rgba(0,0,0,0.4); border-radius:6px; border:1px solid rgba(255,255,255,0.1); font-size:0.75em; display:flex; justify-content:space-around; align-items:center; text-align:center;">
-                    <div style="color:#48dbfb; font-weight:bold; letter-spacing:1px; margin-right:8px;">51211<br>PEARL HARBOR</div>
+                    <div style="color:#48dbfb; font-weight:bold; letter-spacing:1px; margin-right:8px;">51211<br>OAKLAND ESTUARY</div>
                     <div>🌊 ${wh} ${pd}</div>
                     <div>💨 ${wd} ${ws}</div>
                     <div>🌡️ ${wt}</div>
@@ -2016,7 +1988,7 @@ const uiStates = [
             const oceanAlertsRaw = (liveData.alerts?.alerts || []).filter(a => {
                 if (!/craft|marine|surf|sea|water|gale|hurricane|tsunami/i.test(a.event ?? '')) return false;
                 const desc = ((a.areaDesc || '') + ' ' + (a.description || '')).toLowerCase();
-                return desc.includes('oahu') || desc.includes('honolulu') || desc.includes('kaiwi');
+                return desc.includes('bay area') || desc.includes('berkeley') || desc.includes('san francisco') || desc.includes('marin') || desc.includes('san mateo') || desc.includes('monterey') || desc.includes('santa cruz');
             });
             const seenEvents = new Set();
             const oceanAlerts = oceanAlertsRaw.filter(a => { if (seenEvents.has(a.event)) return false; seenEvents.add(a.event); return true; });
@@ -2031,14 +2003,14 @@ const uiStates = [
                 }).join('');
             }
 
-            // 7-Day Waikiki Surf Forecast Box
+            // 7-Day Bay Area Surf Forecast Box
             let surfForecastHtml = '';
-            if (liveData.waikikiSurf && liveData.waikikiSurf.daily) {
+            if (liveData.baySurf && liveData.baySurf.daily) {
                 surfForecastHtml = `<div style="margin-top:10px; background: rgba(10,20,30,0.8); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px;">
-                    <div style="font-size: 10px; font-weight: bold; color: #4facfe; margin-bottom: 6px; text-transform: uppercase; text-align: center; letter-spacing: 1px;">7-Day Waikiki Surf Forecast</div>
+                    <div style="font-size: 10px; font-weight: bold; color: #4facfe; margin-bottom: 6px; text-transform: uppercase; text-align: center; letter-spacing: 1px;">7-Day Bay Area Surf Forecast</div>
                     <div style="display: flex; justify-content: space-between;">`;
                 
-                const daily = liveData.waikikiSurf.daily;
+                const daily = liveData.baySurf.daily;
                 for (let i = 0; i < Math.min(7, daily.time.length); i++) {
                     const dateObj = new Date(daily.time[i] + 'T12:00:00'); // Midday local
                     const dayStr = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
@@ -2066,20 +2038,20 @@ const uiStates = [
         onEnter() { setSurfMode('large'); updateLegend('wave'); startBottomTrafficHUD('ship'); },   // big boxed cards + declutter
         onExit()  { setSurfMode('small'); updateLegend('none'); stopBottomTrafficHUD(); }    // compact pins everywhere else
     },
-    // 🟢 2: TRAFFIC – WAIKIKI & DIAMOND HEAD 🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢
+    // 🟢 2: TRAFFIC – BAY AREA & GOLDEN GATE 🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢
     {
         id: 'state-traffic',
-        title: "TRAFFIC — COMBINED", sub: "WAIKIKI & DIAMOND HEAD", pageSize: 6, holdExtraMs: 3300,
-        view: 'waikiki',
-        layersOn:  [airLayer, shipLayer, superDenseDepthLayer, airportLayer, radarLayerGroup, waikikiTideLayer],
+        title: "TRAFFIC — COMBINED", sub: "BAY AREA & GOLDEN GATE", pageSize: 6, holdExtraMs: 3300,
+        view: 'bay-zoom',
+        layersOn:  [airLayer, shipLayer, superDenseDepthLayer, airportLayer, radarLayerGroup, bayTideLayer],
         layersOff: [aqiLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer],
-        getItems: getWaikikiTrafficItems, renderItem: renderWaikikiTrafficCard
+        getItems: getBayTrafficItems, renderItem: renderBayTrafficCard
     },
     // ── 5: HAZARD MONITOR — SEISMIC + LIGHTNING + TURBULENCE ──────────
     {
         id: 'state-hazard',
         title: "HAZARD MONITOR", sub: "SEISMIC ∙ LIGHTNING ∙ ALERTS ∙ TURBULENCE ∙ ROMS TEMP", perPageMs: 3500, pageSize: 4, holdExtraMs: 4000,
-        view: 'hawaii',
+        view: 'wide',
         layersOn:  [quakeLayer, lightningLayer, alertLayer, turbulenceLayer, hazardTextLayer, romsTempLayer],
         layersOff: [radarLayerGroup, aqiLayer, airLayer, shipLayer, buoyLayer, denseDepthLayer, sparseDepthLayer, deepOceanAirLayer],
         getItems: getDeepOceanFlightItems, renderItem: renderDeepOceanFlightItem,
@@ -2104,7 +2076,7 @@ const uiStates = [
     // ── 6: SATELLITE — GOES-WEST ───────────────────────────────────────
     {
         title: "SATELLITE — GOES-WEST", sub: "LAST 12 HOURS · GEOCOLOR", duration: 10000,
-        view: 'hawaii',
+        view: 'wide',
         layersOn:  [],
         layersOff: [radarLayerGroup, aqiLayer, airLayer, shipLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer, alertLayer, turbulenceLayer],
         onEnter() {
@@ -2125,7 +2097,7 @@ const uiStates = [
             }
             // Update the src ONLY if the 5-minute window has passed, to avoid reloading the GIF
             const cacheBuster = Math.floor(Date.now() / 300000);
-            const targetUrl = "https://cdn.star.nesdis.noaa.gov/GOES18/ABI/SECTOR/hi/GEOCOLOR/GOES18-HI-GEOCOLOR-600x600.gif?t=" + cacheBuster;
+            const targetUrl = "https://cdn.star.nesdis.noaa.gov/GOES18/ABI/SECTOR/psw/GEOCOLOR/GOES18-PSW-GEOCOLOR-600x600.gif?t=" + cacheBuster;
             const img = document.getElementById('goes-img');
             if (img.src !== targetUrl) {
                 img.src = targetUrl;
@@ -2149,10 +2121,10 @@ const uiStates = [
         },
         renderStatic() { return ''; }
     },
-    // ── 11: RADAR — NWS HAWAII LOOP ────────────────────────────────────
+    // ── 11: RADAR — NWS BAY AREA LOOP ────────────────────────────────────
     {
-        title: "RADAR — NWS MRMS", sub: "HAWAII REGIONAL LOOP", duration: 8000,
-        view: 'hawaii',
+        title: "RADAR — NWS MRMS", sub: "BAY AREA REGIONAL LOOP", duration: 8000,
+        view: 'wide',
         layersOn:  [],
         layersOff: [radarLayerGroup, aqiLayer, airLayer, shipLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer, alertLayer, turbulenceLayer],
         onEnter() {
@@ -2173,7 +2145,7 @@ const uiStates = [
             }
             // Update the src ONLY if the 5-minute window has passed, to avoid reloading the GIF
             const cacheBuster = Math.floor(Date.now() / 300000);
-            const targetUrl = "https://radar.weather.gov/ridge/standard/HAWAII_loop.gif?t=" + cacheBuster;
+            const targetUrl = "https://radar.weather.gov/ridge/standard/PACIFICSOUTHWEST_loop.gif?t=" + cacheBuster;
             const img = document.getElementById('nws-radar-img');
             if (img.src !== targetUrl) {
                 img.src = targetUrl;
@@ -2236,7 +2208,7 @@ function transitionState() {
         stationLayer, surfLayer, currentLayer, alertLayer, turbulenceLayer, 
         airportLayer, hazardTextLayer, quakeLayer, lightningLayer, denseDepthLayer,
         superDenseDepthLayer, sparseDepthLayer, deepOceanAirLayer, romsTempLayer,
-        aqiLayer, airLayer, shipLayer, buoyLayer, tideLayer, waikikiTideLayer, radarLayerGroup,
+        aqiLayer, airLayer, shipLayer, buoyLayer, tideLayer, bayTideLayer, radarLayerGroup,
         windLayer, waveLayer
     ].forEach(l => {
         if (!state.layersOn || state.layersOn.indexOf(l) === -1) {
@@ -2244,10 +2216,10 @@ function transitionState() {
         }
     });
 
-    // Handle view changes (Oahu vs Hawaii vs Harbor)
-    const currView = state.view || 'oahu';
-    if (currView !== 'waikiki') {
-        document.getElementById('map').classList.remove('waikiki-zoom');
+    // Handle view changes (default vs wide vs bay-zoom)
+    const currView = state.view || 'default';
+    if (currView !== 'bay-zoom') {
+        document.getElementById('map').classList.remove('bay-zoom');
     }
 
     if (currView !== lastView) {
@@ -2255,34 +2227,34 @@ function transitionState() {
         map.setMaxBounds(null);
         map.setMinZoom(0);
 
-        if (currView === 'oahu') {
+        if (currView === 'default') {
             map.flyToBounds(bounds, { animate: true, duration: 1.5 });
             // Lock bounds once the flight is likely done
             setTimeout(() => {
-                if ((uiStates[currentStateIndex].view || 'oahu') === 'oahu') {
+                if ((uiStates[currentStateIndex].view || 'default') === 'default') {
                     map.setMaxBounds(bounds);
                 }
             }, 1600);
         } else if (currView === 'harbor') {
-            map.flyTo([21.29, -157.84], 12, { animate: true, duration: 1.8 });
+            map.flyTo([37.80, -122.28], 12, { animate: true, duration: 1.8 });
             // We can leave bounds unlocked or lock to Oahu
             setTimeout(() => {
                 if (uiStates[currentStateIndex].view === 'harbor') {
                     map.setMaxBounds(bounds);
                 }
             }, 1900);
-        } else if (currView === 'waikiki') {
-            document.getElementById('map').classList.add('waikiki-zoom');
+        } else if (currView === 'bay-zoom') {
+            document.getElementById('map').classList.add('bay-zoom');
             // Aligned tightly with traffic bounding box (Harbor at left edge, slightly less zoomed in)
-            map.flyToBounds([[21.200, -157.880], [21.320, -157.670]], { animate: true, duration: 1.8 });
+            map.flyToBounds([[37.75, -122.55], [37.85, -122.35]], { animate: true, duration: 1.8 });
             setTimeout(() => {
-                if (uiStates[currentStateIndex].view === 'waikiki') {
+                if (uiStates[currentStateIndex].view === 'bay-zoom') {
                     map.setMaxBounds(bounds);
                 }
             }, 1900);
-        } else if (currView === 'hawaii') {
+        } else if (currView === 'wide') {
             map.setMinZoom(7);
-            map.flyToBounds([[18.7, -156.0], [21.9, -158.3]], { animate: true, duration: 1.8, padding: [30, 30] });
+            map.flyToBounds([[37.0, -123.0], [38.5, -121.5]], { animate: true, duration: 1.8, padding: [30, 30] });
         }
         lastView = currView;
     }
@@ -2298,10 +2270,10 @@ function transitionState() {
     const hasAdvisory = (liveData.alerts?.alerts ?? []).some(a => {
         if (!/small craft|hazardous seas/i.test(a.event ?? '')) return false;
         
-        // Hide global banner on zoomed-in views unless the alert explicitly mentions Oahu
-        if (state.view !== 'hawaii') {
+        // Hide global banner on zoomed-in views unless the alert explicitly mentions Bay Area
+        if (state.view !== 'wide') {
             const desc = ((a.areaDesc || '') + ' ' + (a.description || '')).toLowerCase();
-            if (!desc.includes('oahu') && !desc.includes('honolulu') && !desc.includes('kaiwi')) {
+            if (!desc.includes('bay area') && !desc.includes('berkeley') && !desc.includes('san francisco')) {
                 return false;
             }
         }
@@ -2362,7 +2334,7 @@ fetchCurrents();
 fetchTide();
 fetchWind();
 fetch7DayForecast();
-fetchWaikikiSurfForecast();
+fetchBaySurfForecast();
 
 Promise.race([
     Promise.all([fetchWeather(), fetchBuoys(), fetchQuakes(), fetchAlerts(), fetchTurbulence(), fetchAirQuality()]),
@@ -2382,7 +2354,7 @@ Promise.race([
     setInterval(fetchCurrents,    5 * 60 * 1000); // marine model updates slowly
     setInterval(fetchTide,        5 * 60 * 1000);
     setInterval(fetch7DayForecast, 60 * 60 * 1000); // refresh hourly
-    setInterval(fetchWaikikiSurfForecast, 60 * 60 * 1000); // refresh hourly
+    setInterval(fetchBaySurfForecast, 60 * 60 * 1000); // refresh hourly
 });
 
 // --- RASPBERRY PI HARDWARE DEGRADATION & KIOSK MANAGEMENT ---
