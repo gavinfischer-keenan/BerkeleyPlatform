@@ -345,52 +345,129 @@ This is why the EventStore has a `correlated_with` field and why media clips are
 
 ---
 
-## Data Source Reference
+## Dashboard Architecture (Config-Driven)
 
-Comprehensive table of all external APIs integrated into the API Server:
+The dashboard was originally ported from a Hawaii deployment and has been
+refactored into a **fully config-driven, modular architecture** that can be
+relocated to any geography by changing a single JSON file.
 
-| Source | Domain | Endpoint Route | Center / Coverage | Update Frequency |
-|--------|--------|---------------|-------------------|------------------|
-| USGS | Earthquakes | `/api/earthquakes` | 37.88/-122.26 (300km) | Live |
-| ADSB.fi | Aircraft | `/api/aircraft` | 37.88/-122.26 (150nm) | Live |
-| NWS API | Weather/Forecast | `/api/weather` | Berkeley Coords | Periodic |
-| Open-Meteo | Air Quality | `/api/airquality` | 7 Bay Area Points | Hourly |
-| Open-Meteo | Wind | `/api/wind` | 12-point Bay Area grid | Hourly |
-| NOAA NDBC | Buoys | `/api/buoys` | 46026, 46012, 46013, 46214, 46237, FTPC1 | Hourly |
-| NOAA CO-OPS | Tides | `/api/tide` | SF, Alameda, Richmond, Pt Reyes, Monterey | Hourly |
-| NWS API | Alerts | `/api/alerts` | CA + CAZ508 zones | Live |
-| Open-Meteo Marine | Ocean Currents | `/api/currents` | 6 Offshore Points | Hourly |
-| FAA | Airport Status | `/api/airport` | SFO + OAK | Live |
-| NWS API | Weather Stations | `/api/stations` | OAK, SFO, NUQ, CCR, APC, SUU, HWD | Hourly |
-| FAA | AIRMET/SIGMET | `/api/turbulence` | National (Location-agnostic) | Live |
-| AISStream (Current) | Ship Tracking | `/api/ships` | Bay Area WebSocket | Live (To be replaced) |
+### Configuration System
+
+```
+services/dashboard/
+├── config/
+│   └── default.json           ← ALL hardcoded values live here
+│                                 (100+ settings: location, stations,
+│                                  buoys, URLs, timings, colors)
+├── api-server/
+│   ├── src/
+│   │   ├── config.ts          ← Typed loader with env var overrides
+│   │   ├── lib/
+│   │   │   ├── cache.ts       ← Shared cache middleware (replaces 11 copies)
+│   │   │   ├── fetcher.ts     ← Shared fetch wrapper (timeout + UA from config)
+│   │   │   └── logger.ts      ← Pino logger
+│   │   ├── db.ts              ← Vessel + aircraft observation DB (flat JSON)
+│   │   └── routes/
+│   │       ├── config.ts      ← /api/config (serves config to frontend)
+│   │       ├── weather.ts     ← NWS API (reads coords from config)
+│   │       ├── buoys.ts       ← NDBC (reads station IDs from config)
+│   │       ├── ...            ← All 14 routes are config-driven
+│   │       └── health.ts
+│   └── package.json
+├── frontend/
+│   ├── index.html
+│   └── public/
+│       ├── admin.html         ← Vessel/aircraft image uploader
+│       └── static/
+│           ├── script.js      ← Leaflet.js dashboard (cleaned up)
+│           └── style.css      ← With CSS custom properties (:root tokens)
+```
+
+### Data Flow
+
+```
+config/default.json
+    │
+    ├──→ config.ts (getConfig()) ──→ All route files read from here
+    │                                  (coordinates, station IDs, zones)
+    │
+    ├──→ cache.ts (withCache())  ──→ All routes use shared cache middleware
+    │                                  (TTL per route from config)
+    │
+    ├──→ fetcher.ts (apiFetch()) ──→ All routes use shared fetch wrapper
+    │                                  (timeout + User-Agent from config)
+    │
+    └──→ /api/config endpoint    ──→ Frontend fetches on boot
+                                       (populates CONFIG global)
+```
+
+### API Data Sources
+
+All endpoints are unauthenticated public APIs unless noted:
+
+| Source | Endpoint | Config Key | Cache TTL |
+|--------|----------|-----------|-----------|
+| USGS | `/api/earthquakes` | `location.center` (300km radius) | 5 min |
+| ADSB.fi | `/api/aircraft` | `aircraft.center` + `radiusNm` | 1 min |
+| NWS | `/api/weather` | `location.center` | 10 min |
+| Open-Meteo | `/api/airquality` | `airQualityPoints[]` | 15 min |
+| Open-Meteo | `/api/wind` | `windGrid[]` | 30 min |
+| NOAA NDBC | `/api/buoys` | `buoys[]` | 5 min |
+| NOAA CO-OPS | `/api/tide` | `tideStations[]` | 30 min |
+| NWS | `/api/alerts` | `alerts.area` + `zones` | 5 min |
+| Open-Meteo Marine | `/api/currents` | `currentPoints[]` | 30 min |
+| FAA | `/api/airport` | `airports[].primary` | 2 min |
+| NWS | `/api/stations` | `weatherStations[]` | 10 min |
+| FAA | `/api/turbulence` | (national, no config) | 10 min |
+| Local DB | `/api/ships` | Vessel observation DB | None |
+
+### CSS Design Tokens
+
+All colors are centralized as CSS custom properties in `:root`:
+
+```css
+:root {
+  --bg-body, --bg-viewport, --bg-panel, --bg-glass
+  --text-primary, --text-muted, --text-light, --text-inactive
+  --accent-cyan, --accent-blue, --accent-gold, --accent-green
+  --hazard-red, --hazard-orange, --hazard-pink, --hazard-purple
+}
+```
+
+To retheme the dashboard, modify only the `:root` block.
 
 ---
 
 ## Porting Status
 
-**What's Done:**
-- Node 01 hardware and storage upgrades complete (64GB RAM, 2TB NVMe boot, 1TB SSD data).
-- Node 02 hardware procured (64GB RAM, RTX 4080 SUPER, 3x NVMe drives).
-- Dashboard API server code ported to `services/dashboard/api-server/`.
-- All 14 API server routes successfully re-centered to Bay Area coordinates and relevant stations.
-
-**In Progress (To-Do for Frontend - `script.js` & `style.css`):**
-- Update bounds in Leaflet (`[[20.994, -158.45], [21.75, -157.00]]` → Bay Area).
-- Replace PacIOOS WMS layers with GEBCO bathymetry + IEM NEXRAD.
-- Update island polygons to Bay Area landmark polygons (replace `hawaii.geojson`).
-- Update bathymetry/surf bounds to Bay Area bounds.
-- Update surf spots (Mavericks, Ocean Beach).
-- Map earthquake filtering to Hayward/Calaveras fault labels.
-- Update timezone (`Pacific/Honolulu` → `America/Los_Angeles`).
-- Map Hawaii IATA codes to Bay Area IATA codes.
-- Refactor the 6-state `uiStates` array with updated titles and zoom levels.
-- Rename Hawaii CSS classes and update User-Agent strings.
+**Completed (2026-08-16):**
+- ✅ Node 01 hardware and storage upgrades complete (64GB RAM, 2TB NVMe boot, 1TB SSD data)
+- ✅ Node 02 hardware procured (64GB RAM, RTX 4080 SUPER, 3× NVMe drives)
+- ✅ Dashboard API server ported to Bay Area coordinates
+- ✅ All 14 API routes re-centered, config-driven, using shared cache/fetcher
+- ✅ Frontend script.js ported to Bay Area (bounds, buoys, stations, airports, surf spots)
+- ✅ Frontend style.css ported (renamed classes, added CSS custom properties)
+- ✅ AIS WebSocket streaming removed (ships.ts now reads from local vessel DB)
+- ✅ mock.js deleted (was 110KB, 90% duplication of script.js)
+- ✅ Dead code removed (unused functions, disabled fetchWind body)
+- ✅ Bathymetry generation deduplicated (3 generators → 1 reusable function)
+- ✅ Satellite/radar overlay logic deduplicated
+- ✅ Memory leak fixed (trafficHistory garbage collection)
+- ✅ Polling intervals staggered (prevents thundering herd)
+- ✅ Unused npm dependencies pruned (better-sqlite3, drizzle-orm, cookie-parser)
+- ✅ CONFIG.md documentation created
+- ✅ Automated test suite created (Vitest)
+- ✅ Architecture document updated
 
 **To-Do (Hardware/Infra):**
-- Proxmox VE 8.x installation on Node 02 (after Windows 11 data migration).
-- Transition ship tracking from AISStream.io to local AIS SDR (Pi 5) + MQTT.
-- Integrate Google Coral USB TPU on Day 2.
+- Proxmox VE 8.x installation on Node 02 (after Windows 11 data migration)
+- Transition ship tracking from DB-only to local AIS SDR (Pi 5) → MQTT
+- Integrate Google Coral USB TPU on Day 2
+
+**To-Do (Software):**
+- Split script.js into ES modules (config.js, map.js, geo.js, fetch.js, render.js, ui-states.js, engine.js, main.js)
+- Replace remaining hardcoded CSS hex values with var() references
+- Frontend config.js bootstrap (fetch /api/config on load)
 
 ---
 
@@ -398,15 +475,21 @@ Comprehensive table of all external APIs integrated into the API Server:
 
 - **Storage Separation:** Dedicated the 1TB internal SSD on Node 01 (`local-data` pool) specifically for InfluxDB and Frigate to avoid wear on the boot NVMe and ensure high IOPS.
 - **Node 02 Staggered Launch:** Decided to bring Node 02 online *after* Node 01 is fully stable to avoid debugging two complex clustered environments simultaneously.
-- **Ship Tracking Architecture:** Decided to drop the paid AISStream.io WebSocket in favor of local RTL-SDR on a Pi 5 publishing to MQTT. The API server will be refactored to read from an MQTT cache.
+- **Ship Tracking Architecture:** Dropped the paid AISStream.io WebSocket in favor of local RTL-SDR on a Pi 5 publishing to MQTT. The `/api/ships` route now reads from the local vessel observation DB, which will be populated by MQTT in the future.
 - **Network Upgrades:** Upgraded to a 2.5GbE switch for all nodes to accommodate high-bandwidth storage and Proxmox clustered data sync.
 - **Memory Optimization:** Both nodes upgraded to 64GB RAM to ensure sufficient overhead for Proxmox ZFS ARC and future container deployments.
+- **Config-Driven Architecture:** All hardcoded values extracted to `config/default.json` to enable geographic relocation without code changes. The frontend fetches config from `/api/config` on boot.
+- **Shared Infrastructure:** Created `lib/cache.ts` and `lib/fetcher.ts` to replace 11+ copy-pasted cache blocks and duplicated fetch boilerplate across route files.
+- **mock.js Deletion:** Deleted the 110KB mock.js (90%+ duplication of script.js). If demo mode is needed, the real script.js handles API-offline graceful degradation natively.
+- **CSS Design Tokens:** Extracted all hardcoded colors to CSS custom properties in `:root` to enable easy theming and consistent palette management.
+- **Unused Dependencies:** Removed `better-sqlite3`, `drizzle-orm`, and `cookie-parser` from package.json — the app uses a flat JSON file for persistence, not SQLite.
 
 ---
 
 ## Deferred Items
 
+- **Frontend Module Split:** script.js should be split into ~8 ES modules using `type="module"`. Deferred to next session — the config-driven cleanup was prioritized.
 - **VisionAgent & CrossModal AI:** Deferred until Node 02 is fully operational and base telemetry is stable. Rationale: Need stable ground-truth data (audio/video) before correlating.
-- **Local Ship Tracking via SDR:** Deferred until Pi 5 SDR setup is complete. Temporarily keeping AISStream.io endpoint defined but disabled until rewrite.
+- **Local Ship Tracking via SDR:** Deferred until Pi 5 SDR setup is complete. The `/api/ships` endpoint reads from the vessel DB which will be populated by MQTT messages from the SDR.
 - **Touch Command Panel:** Deferred to future phase. Rationale: Prioritizing automated alerts (Alexa TTS, Display) over manual control panels initially.
 - **Push Notifications (Pushover/Gotify):** Deferred until internal dashboard and Node 01 networking are finalized.

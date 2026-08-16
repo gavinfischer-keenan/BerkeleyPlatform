@@ -15,53 +15,43 @@
 - [x] Coral USB TPU ordered (arriving Monday / Day 2)
 - [x] Raspberry Shake verified online at `rs.local`
 
-### Software — Backend API (12/12 routes ported)
-- [x] `earthquakes.ts` — USGS, 37.88/-122.26, 300km radius
-- [x] `aircraft.ts` — ADSB.fi, 37.88/-122.26, 150nm
-- [x] `weather.ts` — NWS, Berkeley coordinates
-- [x] `airquality.ts` — Open-Meteo, 7 Bay Area points
-- [x] `wind.ts` — Open-Meteo, 12-point Bay Area grid
-- [x] `buoys.ts` — NDBC: 46026, 46012, 46013, 46214, 46237, FTPC1
-- [x] `tide.ts` — NOAA CO-OPS: SF, Alameda, Richmond, Pt Reyes, Monterey
-- [x] `alerts.ts` — NWS zones CA + CAZ508
-- [x] `currents.ts` — Open-Meteo Marine, 6 offshore points
-- [x] `airport.ts` — FAA status SFO + OAK (worst-of-two)
-- [x] `stations.ts` — NWS weather: OAK, SFO, NUQ, CCR, APC, SUU, HWD
-- [x] `turbulence.ts` — Location-agnostic (no changes needed)
+### Software — Backend Architecture Overhaul (2026-08-16)
+- [x] `config/default.json` — All 100+ hardcoded values extracted to single config file
+- [x] `config.ts` — Typed config loader with env var overrides
+- [x] `routes/config.ts` — `/api/config` endpoint (frontend fetches on boot)
+- [x] `lib/cache.ts` — Shared cache middleware (replaces 11 copy-pasted blocks)
+- [x] `lib/fetcher.ts` — Shared fetch wrapper (timeout + User-Agent from config)
+- [x] All 14 route files refactored to use config + cache + fetcher
+- [x] AIS WebSocket streaming removed from `ships.ts` (vessel DB retained for future MQTT)
+- [x] Standardized error handling (all routes return 502 on upstream failure)
+- [x] Pruned unused npm dependencies (`better-sqlite3`, `drizzle-orm`, `cookie-parser`)
+- [x] `admin.html` updated from "Hawaii Telemetry" to "Mosswood Command Center"
 
-### Documentation
-- [x] Implementation plan created and approved
-- [x] Hardware inventory (HARDWARE.md) updated with confirmed specs
-- [x] Bay Area data sources reference document created
-- [x] Node 02 hardware scan completed (motherboard, RAM, drives, GPU)
-- [x] Decisions log (DECISIONS.md) created
-- [x] This status document (STATUS.md) created
+### Software — Frontend Cleanup (2026-08-16)
+- [x] Full port of script.js to Bay Area (bounds, buoys, stations, airports, surf spots)
+- [x] Full port of style.css (renamed classes, added CSS custom properties)
+- [x] `mock.js` deleted (110KB, 90%+ duplication of script.js)
+- [x] All ship/AIS code removed from script.js (~200 lines)
+- [x] Dead code removed (fetchWind body, unused polygon functions)
+- [x] Bathymetry generation deduplicated (3 generators → 1 reusable function)
+- [x] Satellite/radar overlay logic deduplicated
+- [x] `trafficHistory` memory leak fixed (added garbage collection)
+- [x] Polling intervals staggered (prevents thundering herd)
+- [x] CSS design tokens added (`:root` custom properties for all colors)
+
+### Documentation (2026-08-16)
+- [x] `CONFIG.md` — Comprehensive config reference with all keys documented
+- [x] `ARCHITECTURE.md` — Updated with config-driven architecture, data flow, decisions
+- [x] `STATUS.md` — Updated with all completed work
+- [x] Implementation plan created, approved, and executed
+
+### Testing (2026-08-16)
+- [x] Vitest test framework installed
+- [x] Automated tests for config loader, cache middleware, fetch wrapper
+- [x] Automated tests for key API routes
 
 ### Repository
-- [x] Hawaii repo cloned
-- [x] BerkeleyPlatform repo cloned
-- [x] Ported dashboard code placed in `services/dashboard/` in BerkeleyPlatform
-
----
-
-## 🔄 In Progress
-
-### Software — Frontend (script.js + style.css)
-- [ ] Map bounds: `[[20.994, -158.45], [21.75, -157.00]]` → Bay Area bounds
-- [ ] PacIOOS WMS layers → GEBCO bathymetry + IEM NEXRAD radar
-- [ ] Island polygons (Kauai, Oahu, Molokai, Maui, Hawaii) → Bay Area landmarks
-- [ ] Bathymetry/surf grid bounds → Bay Area coordinates
-- [ ] Surf spot labels (Pipeline, Waikiki) → Bay Area spots (Mavericks, Ocean Beach)
-- [ ] Earthquake place-name filtering → Hayward/Calaveras fault labels
-- [ ] Timezone: Pacific/Honolulu → America/Los_Angeles
-- [ ] Hawaii IATA codes → Bay Area IATA codes (SFO, OAK, SJC, etc.)
-- [ ] uiStates array (6 dashboard views) → Bay Area titles and zoom levels
-- [ ] CSS: Waikiki zoom overrides, HNL status box IDs → Bay Area equivalents
-- [ ] hawaii.geojson → Bay Area GeoJSON
-- [ ] Distance calculations (Honolulu-centered) → Berkeley-centered
-
-### Architecture Documentation
-- [ ] ARCHITECTURE.md comprehensive rewrite (in progress)
+- [x] All changes committed and pushed to GitHub
 
 ---
 
@@ -86,10 +76,10 @@
 
 ## 📋 To Do — Software (Post-Node 01 Online)
 
-- [ ] Complete frontend porting (script.js — 100+ location changes)
+- [x] Complete frontend porting (script.js — 100+ location changes)
 - [ ] Generate Bay Area GeoJSON (replace hawaii.geojson)
 - [ ] Build and test API server on Node 02
-- [ ] Rewrite `ships.ts` to consume MQTT instead of AISStream WebSocket
+- [x] Rewrite `ships.ts` to read from local DB (MQTT integration deferred)
 - [ ] Configure nginx reverse proxy (internal + public vhosts)
 - [ ] Deploy dashboard Docker container on Node 02
 - [ ] Set up InfluxDB buckets and retention policies
@@ -97,6 +87,8 @@
 - [ ] Deploy Home Assistant OS VM
 - [ ] Deploy Wyoming Voice Pipeline
 - [ ] Deploy Frigate NVR
+- [ ] Split script.js into ES modules (config.js, map.js, geo.js, etc.)
+- [ ] Frontend config.js bootstrap (fetch /api/config on load)
 
 ## 📋 To Do — Node 02 Bring-Up (After Node 01 Stable)
 
