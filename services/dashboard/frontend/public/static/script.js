@@ -1142,8 +1142,8 @@ async function fetchAirQuality() {
         lightningLayer.clearLayers();
         if (/thunder/i.test(liveData.weather?.shortForecast ?? '')) {
             [
-                [21.42,-157.81], [21.37,-157.74], [21.29,-157.95],
-                [21.46,-157.68], [21.35,-157.88],
+                [37.75,-122.45], [37.80,-122.40], [37.78,-122.50],
+                [37.85,-122.35], [37.70,-122.48],
             ].forEach(c => L.marker(c, { pane: 'hazardPane',
                 icon: L.divIcon({ className: 'lightning-marker', html: '⚡', iconSize: [22, 22] })
             }).addTo(lightningLayer));
@@ -1159,12 +1159,12 @@ async function fetchBaySurfForecast() {
         if (!r.ok) throw new Error(r.status);
         const data = await r.json();
         liveData.baySurf = data;
-    } catch(e) { console.warn('Bay surf fetch:', e); }
+    } catch(e) { console.warn('Bay Area surf fetch:', e); }
 }
 
 async function fetch7DayForecast() {
     try {
-        const r = await fetch('https://api.weather.gov/gridpoints/HFO/154,145/forecast');
+        const r = await fetch('https://api.weather.gov/gridpoints/MTR/84,105/forecast');
         if (!r.ok) throw new Error(r.status);
         const data = await r.json();
         
@@ -1312,12 +1312,10 @@ async function fetchAircraft() {
         // Fallback placeholders if OpenSky returned nothing (rate-limit / network)
         if (!liveData.aircraft.length) {
             [
-                { c:[21.320,-157.860], text:'✈️ HAL12',  cls:'traffic-label traffic-label-air'  },
-                { c:[21.255,-157.710], text:'✈️ SWA453',  cls:'traffic-label traffic-label-air'  },
-                { c:[21.130,-157.480], text:'✈️ UAL930', cls:'traffic-label traffic-label-air'  },
-                { c:[21.350,-157.960], text:'🚁 TOUR01', cls:'traffic-label traffic-label-helo' },
-                { c:[21.290,-157.850], text:'🚁 USCG 65',cls:'traffic-label traffic-label-helo' },
-                { c:[21.308,-157.876], text:'🚁 BLUE HI',cls:'traffic-label traffic-label-helo' },
+                { c:[37.62,-122.37], text:'✈️ SFO-APP',  cls:'traffic-label traffic-label-air'  },
+                { c:[37.75,-122.45], text:'✈️ OAK-DEP',  cls:'traffic-label traffic-label-air'  },
+                { c:[37.85,-122.30], text:'✈️ BAY-TRA', cls:'traffic-label traffic-label-air'  },
+                { c:[37.79,-122.42], text:'🚁 HPD-01', cls:'traffic-label traffic-label-helo' },
             ].forEach(t => {
                 const m = L.marker(t.c, { pane:'trafficPane',
                     icon: L.divIcon({ className:t.cls, html:t.text, iconSize:[200,20] })
@@ -1379,17 +1377,6 @@ async function fetchTide() {
             // Push them away from land
             let angle = Math.PI / 2; // Default South
             let rOff = 140;
-            if (t.id === '1612668') { angle = -Math.PI * 0.65; rOff = 150; } // Haleiwa more North, slightly West
-            if (t.id === '1612480') { angle = -Math.PI / 4; rOff = 140; } // Kaneohe North-East
-            if (t.id === '1612424') { angle = Math.PI; rOff = 160; } // Waianae West
-            if (t.id === '1612340') { angle = Math.PI * 0.75; rOff = 200; } // SF station offset SW
-            if (t.id === '1613198') { angle = Math.PI / 2; rOff = 140; } // Kaunakakai South
-
-            const marker = L.marker(t.coords, { pane: 'poiPane',
-                icon: L.divIcon({ className: '', html, iconSize: [120, 48], iconAnchor: [60, 24] })
-            }).addTo(tideLayer);
-            tideMarkers.push({ marker, html, color, angle, rOff });
-
             if (t.id === '1612340' || (t.name && t.name.includes('Berkeley'))) {
                 L.marker([37.868, -122.316], { pane: 'poiPane',
                     icon: L.divIcon({ className: '', html, iconSize: [120, 48], iconAnchor: [60, 24] })
@@ -1472,12 +1459,9 @@ function getAviationItems() {
     });
     if (real.length) return real;
     return [
-        { call:'HAL12',  type:'✈️', route:'SFO ➔ LAX', alt:'FL310',  spd:'475 kts', isDeepOcean: false, origin: 'SFO', dest: 'LAX' },
-        { call:'SWA453', type:'✈️', route:'OAK ➔ HNL', alt:'4,200ft',spd:'180 kts', isDeepOcean: false, origin: 'OAK', dest: 'HNL' },
-        { call:'UAL930', type:'✈️', route:'SFO ➔ ORD', alt:'FL240',  spd:'Climbing', isDeepOcean: true, origin: 'SFO', dest: 'ORD' }, // Fake deep ocean for testing if offline
-        { call:'TOUR01', type:'🚁', route:'Local Tour', alt:'700ft',  spd:'95 kts', isDeepOcean: false, origin: null, dest: null },
-        { call:'USCG65', type:'🚁', route:'SAR Patrol', alt:'250ft',  spd:'120 kts', isDeepOcean: false, origin: null, dest: null },
-        { call:'BLUE-H', type:'🚁', route:'Scenic Tour',alt:'900ft',  spd:'80 kts', isDeepOcean: false, origin: null, dest: null },
+        { call:'SWA453', type:'✈️', route:'SFO ➔ LAX', alt:'FL310',  spd:'475 kts', isDeepOcean: false, origin: 'SFO', dest: 'LAX' },
+        { call:'UAL930', type:'✈️', route:'OAK ➔ HNL', alt:'4,200ft',spd:'180 kts', isDeepOcean: false, origin: 'OAK', dest: 'HNL' },
+        { call:'DAL44',  type:'✈️', route:'SFO ➔ ORD', alt:'FL240',  spd:'Climbing', isDeepOcean: true, origin: 'SFO', dest: 'ORD' },
     ];
 }
 
@@ -1551,8 +1535,8 @@ function getTrafficItems() {
     const items = [];
     const currView = typeof currentStateIndex !== 'undefined' ? (uiStates[currentStateIndex]?.view || 'oahu') : 'oahu';
     let b;
-    if (currView === 'harbor') b = L.latLng([21.29, -157.84]).toBounds(8000); 
-    else b = L.latLngBounds([[20.994, -158.45], [21.75, -157.00]]);
+    if (currView === 'harbor') b = L.latLng([37.80, -122.28]).toBounds(8000); 
+    else b = L.latLngBounds([[37.5, -123.0], [38.5, -121.5]]);
 
     getAviationItems()
         .filter(a => a.lat != null && a.lng != null && b.contains([a.lat, a.lng]))
@@ -1578,8 +1562,8 @@ function getTrafficItems() {
 
 function getBayTrafficItems() {
     const items = [];
-    // Tightly match the map zoom bounds (Ala Wai Harbor to past Diamond Head)
-    const b = L.latLngBounds([21.200, -157.880], [21.320, -157.670]);
+    // Tightly match the map zoom bounds (Oakland Estuary to past Golden Gate)
+    const b = L.latLngBounds([37.75, -122.55], [37.85, -122.35]);
 
     // Filter Ships
     (liveData.ships || []).forEach(v => {
@@ -1629,8 +1613,8 @@ function renderTrafficItem(item) {
 
 function isInHarbor(lat, lng) {
     if (!lat || !lng) return false;
-    // Box for Ala Wai Harbor
-    return (lat >= 21.282 && lat <= 21.288 && lng >= -157.844 && lng <= -157.838);
+    // Box for Oakland Estuary
+    return (lat >= 37.78 && lat <= 37.81 && lng >= -122.30 && lng <= -122.25);
 }
 
 function renderBayTrafficCard(item) {
@@ -1734,16 +1718,16 @@ function startBottomTrafficHUD(mode) {
     function update() {
         let items = [];
         if (mode === 'air') {
-            const b = L.latLngBounds([[18.5, -160.5], [22.5, -154.5]]);
+            const b = L.latLngBounds([[37.0, -123.0], [38.5, -121.5]]);
             items = getAviationItems()
                 .filter(a => a.lat != null && a.lng != null && b.contains([a.lat, a.lng]))
-                .map(a => ({ icon: a.type, name: a.call, detail: `${a.alt} ${a.spd}`, sub: a.route, color: a.type === '??' ? '#ffd32a' : '#1dd1a1' }));
+                .map(a => ({ icon: a.type, name: a.call, detail: `${a.alt} ${a.spd}`, sub: a.route, color: a.type === '🚁' ? '#ffd32a' : '#1dd1a1' }));
         } else if (mode === 'ship') {
-            const b = L.latLngBounds([[18.5, -160.5], [22.5, -154.5]]);
+            const b = L.latLngBounds([[37.0, -123.0], [38.5, -121.5]]);
             items = (liveData.ships || [])
                 .filter(v => v.lat != null && v.lng != null && b.contains([v.lat, v.lng]))
                 .sort((a, b) => (b.sog || 0) - (a.sog || 0))
-                .map(v => ({ icon: '??', name: v.name, detail: v.sog != null ? `${v.sog.toFixed(1)} kt` : '--', sub: shipTypeLabel(v.type), color: '#0984e3' }));
+                .map(v => ({ icon: '🚢', name: v.name, detail: v.sog != null ? `${v.sog.toFixed(1)} kt` : '--', sub: shipTypeLabel(v.type), color: '#0984e3' }));
         }
         
         const displayItems = items.slice(0, 4);
@@ -1766,7 +1750,7 @@ function stopBottomTrafficHUD() {
 }
 
 
-function updateHNLBox() {
+function updateSFOBox() {
     const box = document.getElementById('airport-status-box');
     if (!box) return;
     const apt = liveData.airport || { status: 'LOADING...', color: '#a4b0be', details: 'Awaiting data...' };
@@ -1774,7 +1758,7 @@ function updateHNLBox() {
     box.style.borderColor = apt.color;
     box.innerHTML = `
         <div style="font-weight:bold; font-size:12px; color:${apt.color}; text-transform:uppercase; margin-bottom:4px; text-shadow: 0 0 4px ${apt.color};">
-            ✈ HNL AIRPORT: ${apt.status}
+            ✈ SFO AIRPORT: ${apt.status}
         </div>
         <div style="font-size:9.5px; color:#dfe6e9; line-height:1.3;">
             ${apt.details}
@@ -1782,12 +1766,12 @@ function updateHNLBox() {
     `;
 }
 
-function hideHNLBox() {
+function hideSFOBox() {
     const box = document.getElementById('airport-status-box');
     if (box) box.style.display = 'none';
 }
 
-function updateHNLBoxMet() {
+function updateSFOBoxMet() {
     const box = document.getElementById('airport-status-box-met');
     if (!box) return;
     const apt = liveData.airport || { status: 'LOADING...', color: '#a4b0be', details: 'Awaiting data...' };
@@ -1795,7 +1779,7 @@ function updateHNLBoxMet() {
     box.style.borderColor = apt.color;
     box.innerHTML = `
         <div style="font-weight:bold; font-size:18px; color:${apt.color}; text-transform:uppercase; margin-bottom:8px; text-shadow: 0 0 4px ${apt.color};">
-            ✈ HNL
+            ✈ SFO
         </div>
         <div style="font-weight:bold; font-size:14px; color:${apt.color}; text-transform:uppercase; margin-bottom:8px; text-shadow: 0 0 4px ${apt.color};">
             ${apt.status}
@@ -1806,7 +1790,7 @@ function updateHNLBoxMet() {
     `;
 }
 
-function hideHNLBoxMet() {
+function hideSFOBoxMet() {
     const box = document.getElementById('airport-status-box-met');
     if (box) box.style.display = 'none';
 }
@@ -1927,7 +1911,7 @@ const uiStates = [
             const fb = document.getElementById('forecast-box');
             if (fb) fb.style.display = 'block';
             updateLegend('wind');
-            updateHNLBoxMet();
+            updateSFOBoxMet();
         },
         onExit()  { 
             document.getElementById('main-dash').classList.remove('hud-hidden'); 
@@ -1935,7 +1919,7 @@ const uiStates = [
             if (fb) fb.style.display = 'none';
             updateLegend('none');
             stopBottomTrafficHUD();
-            hideHNLBoxMet();
+            hideSFOBoxMet();
         }
     },
     // 🟢 1: SURF & OCEAN – combined surf cards + buoy HUDs 🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢
@@ -1966,6 +1950,7 @@ const uiStates = [
             });
             const peakStr = peakHi > 0 ? `${peakHi}ft` : '--';
             const peakColor = peakHi > 6 ? '#ff9f43' : '#1dd1a1';
+            
             // Condensed Buoy 51211 (Oakland Estuary)
             const b51211 = active.find(b => b.id === '51211');
             let buoyDataHtml = '';
@@ -2038,10 +2023,10 @@ const uiStates = [
         onEnter() { setSurfMode('large'); updateLegend('wave'); startBottomTrafficHUD('ship'); },   // big boxed cards + declutter
         onExit()  { setSurfMode('small'); updateLegend('none'); stopBottomTrafficHUD(); }    // compact pins everywhere else
     },
-    // 🟢 2: TRAFFIC – BAY AREA & GOLDEN GATE 🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢
+    // 🟢 2: TRAFFIC – OAKLAND ESTUARY and PORT 🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢
     {
         id: 'state-traffic',
-        title: "TRAFFIC — COMBINED", sub: "BAY AREA & GOLDEN GATE", pageSize: 6, holdExtraMs: 3300,
+        title: "TRAFFIC — COMBINED", sub: "OAKLAND ESTUARY and PORT", pageSize: 6, holdExtraMs: 3300,
         view: 'bay-zoom',
         layersOn:  [airLayer, shipLayer, superDenseDepthLayer, airportLayer, radarLayerGroup, bayTideLayer],
         layersOff: [aqiLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer],
@@ -2055,8 +2040,8 @@ const uiStates = [
         layersOn:  [quakeLayer, lightningLayer, alertLayer, turbulenceLayer, hazardTextLayer, romsTempLayer],
         layersOff: [radarLayerGroup, aqiLayer, airLayer, shipLayer, buoyLayer, denseDepthLayer, sparseDepthLayer, deepOceanAirLayer],
         getItems: getDeepOceanFlightItems, renderItem: renderDeepOceanFlightItem,
-        onEnter() { fetchAirport(); updateLegend('roms'); updateHNLBox(); },
-        onExit()  { updateLegend('none'); hideHNLBox(); },
+        onEnter() { fetchAirport(); updateLegend('roms'); updateSFOBox(); },
+        onExit()  { updateLegend('none'); hideSFOBox(); },
         renderStatic() {
             return `
             <div class="hazard-legend" style="margin-bottom: 12px;">
@@ -2180,7 +2165,7 @@ let currentStateIndex = 0;
 let currentPage       = 0;
 let _pageTimer        = null;
 let _prevStateIndex   = -1;
-let lastView          = 'oahu';
+let lastView          = 'default';
 
 function transitionState() {
     try {
@@ -2237,7 +2222,7 @@ function transitionState() {
             }, 1600);
         } else if (currView === 'harbor') {
             map.flyTo([37.80, -122.28], 12, { animate: true, duration: 1.8 });
-            // We can leave bounds unlocked or lock to Oahu
+            // We can leave bounds unlocked or lock to location
             setTimeout(() => {
                 if (uiStates[currentStateIndex].view === 'harbor') {
                     map.setMaxBounds(bounds);
