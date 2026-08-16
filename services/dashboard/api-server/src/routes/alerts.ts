@@ -1,35 +1,51 @@
+/**
+ * Alerts Route
+ * Fetches active NWS alerts for the config-defined area and zones.
+ */
 import { Router } from "express";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
 
-let cache: { data: unknown; expiresAt: number } | null = null;
-const CACHE_MS = 5 * 60 * 1000;
-
-router.get("/alerts", async (req, res) => {
+router.get("/alerts", withCache('alerts'), async (req, res) => {
+  const cfg = getConfig();
   try {
-    if (cache && Date.now() < cache.expiresAt) {
-      res.json(cache.data);
-      return;
+    const area = cfg.alerts.area;
+    const zones = cfg.alerts.zones;
+
+    const fetches = [
+      apiFetch(`https://api.weather.gov/alerts/active?area=${encodeURIComponent(area)}`)
+    ];
+
+    for (const zone of zones) {
+      fetches.push(apiFetch(`https://api.weather.gov/alerts/active?zone=${encodeURIComponent(zone)}`));
     }
 
-    // Fetch active NWS alerts for CA (land) and CAZ508 (coastal marine)
-    const [rHI, rPH] = await Promise.all([
-      fetch("https://api.weather.gov/alerts/active?area=CA", { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "MosswoodCommandCenter/1.0 (contact@example.com)" },
-      }),
-      fetch("https://api.weather.gov/alerts/active?zone=CAZ508", { signal: AbortSignal.timeout(8000),
-        headers: { "User-Agent": "MosswoodCommandCenter/1.0 (contact@example.com)" },
-      })
-    ]);
+    const responses = await Promise.all(fetches);
 
-    if (!rHI.ok) throw new Error(`NWS alerts CA ${rHI.status}`);
-    if (!rPH.ok) throw new Error(`NWS alerts CAZ508 ${rPH.status}`);
+    for (const r of responses) {
+      if (!r.ok) throw new Error(`NWS alerts returned ${r.status}`);
+    }
 
-    const jsonHI = (await rHI.json()) as { features: any[] };
-    const jsonPH = (await rPH.json()) as { features: any[] };
+    const jsons = await Promise.all(responses.map(r => r.json() as Promise<{ features: any[] }>));
+    
+    let allFeatures: any[] = [];
+    for (const j of jsons) {
+      allFeatures = allFeatures.concat(j.features || []);
+    }
 
-    const allFeatures = [...(jsonHI.features || []), ...(jsonPH.features || [])];
+    // De-duplicate features by ID to avoid overlapping alerts from area + zone overlap
+    const seen = new Set();
+    const uniqueFeatures = allFeatures.filter(f => {
+      const id = f.properties.id || f.id;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
 
-    const alerts = allFeatures.map((f: any) => ({
+    const alerts = uniqueFeatures.map((f: any) => ({
       event: f.properties.event,
       severity: f.properties.severity,
       headline: f.properties.headline,
@@ -41,14 +57,12 @@ router.get("/alerts", async (req, res) => {
     }));
 
     const data = { alerts, fetchedAt: Date.now() };
-    cache = { data, expiresAt: Date.now() + CACHE_MS };
+    (res as any).cacheStore(data);
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch NWS alerts");
-    res.status(502).json({ error: "Failed to fetch alerts", alerts: [] });
+    res.status(502).json({ error: "upstream_unavailable", source: "alerts" });
   }
 });
 
 export default router;
-
-

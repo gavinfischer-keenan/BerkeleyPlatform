@@ -1,23 +1,26 @@
+/**
+ * Airport Route
+ * Fetches FAA NAS status for primary config-defined airports.
+ */
 import { Router, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
 
-router.get("/airport", async (req: Request, res: Response) => {
+router.get("/airport", withCache('airport'), async (req: Request, res: Response) => {
+    const cfg = getConfig();
     try {
-        const response = await fetch("https://nasstatus.faa.gov/api/airport-events", { signal: AbortSignal.timeout(8000),
-            headers: {
-                "User-Agent": "MosswoodCommandCenter/1.0"
-            }
-        });
+        const response = await apiFetch("https://nasstatus.faa.gov/api/airport-events");
         
         if (!response.ok) {
             throw new Error(`FAA API returned ${response.status}`);
         }
         
         const data = await response.json() as any[];
-        const sfo = data.find((a: any) => a.airportId === "SFO");
-        const oak = data.find((a: any) => a.airportId === "OAK");
+        const primaryAirports = cfg.airports.filter(a => a.primary);
         
         function getStatus(airport: any, name: string) {
             let status = "NORMAL OPERATIONS";
@@ -62,28 +65,29 @@ router.get("/airport", async (req: Request, res: Response) => {
             return { status, color, details, rank };
         }
 
-        const sfoStatus = getStatus(sfo, "SFO");
-        const oakStatus = getStatus(oak, "OAK");
-        const worst = sfoStatus.rank >= oakStatus.rank ? sfoStatus : oakStatus;
+        const statuses = primaryAirports.map(pa => {
+            const airportData = data.find((a: any) => a.airportId === pa.code);
+            return getStatus(airportData, pa.code);
+        });
+
+        // Find the worst status
+        const worst = statuses.reduce((prev, current) => (prev.rank > current.rank) ? prev : current, { rank: -1 } as any);
         
-        const status = worst.status;
-        const color = worst.color;
-        const details = worst.details;
+        const status = worst.rank >= 0 ? worst.status : "NORMAL OPERATIONS";
+        const color = worst.rank >= 0 ? worst.color : "#1dd1a1";
+        const details = worst.rank >= 0 ? worst.details : "No known delays or closures at this time.";
         
-        res.json({
+        const result = {
             status,
             color,
             details
-        });
+        };
+        (res as any).cacheStore(result);
+        res.json(result);
     } catch (error: any) {
         logger.error({ err: error }, "Error fetching airport status");
-        res.json({
-            status: "STATUS UNAVAILABLE",
-            color: "#636e72", // Gray
-            details: "Could not fetch data from FAA systems."
-        });
+        res.status(502).json({ error: "upstream_unavailable", source: "airport" });
     }
 });
 
 export default router;
-

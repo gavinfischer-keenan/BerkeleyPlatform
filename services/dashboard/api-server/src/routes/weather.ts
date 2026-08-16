@@ -1,28 +1,22 @@
+/**
+ * Weather Route
+ * Fetches current weather and hourly forecast from the NWS API using the config center coordinates.
+ */
 import { Router } from "express";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
 
 // National Weather Service API — free, no key required
-// Using Berkeley coordinates
-const LAT = "37.8802";
-const LNG = "-122.2636";
+router.get("/weather", withCache('weather'), async (req, res) => {
+  const cfg = getConfig();
+  const [lat, lng] = cfg.location.center;
 
-let cache: { data: unknown; expiresAt: number } | null = null;
-const CACHE_MS = 10 * 60 * 1000; // 10 minutes
-
-router.get("/weather", async (req, res) => {
   try {
-    if (cache && Date.now() < cache.expiresAt) {
-      res.json(cache.data);
-      return;
-    }
-
     // Step 1: get the forecast office + grid for this location
-    const pointRes = await fetch(
-      `https://api.weather.gov/points/${LAT},${LNG}`,
-      { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "MosswoodCommandCenter/1.0 (contact@example.com)" } },
-    );
-
+    const pointRes = await apiFetch(`https://api.weather.gov/points/${lat},${lng}`);
     if (!pointRes.ok) throw new Error(`NWS points ${pointRes.status}`);
 
     const pointJson = (await pointRes.json()) as {
@@ -34,10 +28,7 @@ router.get("/weather", async (req, res) => {
     };
 
     // Step 2: get the actual forecast
-    const forecastRes = await fetch(pointJson.properties.forecastHourly, { signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": "MosswoodCommandCenter/1.0 (contact@example.com)" },
-    });
-
+    const forecastRes = await apiFetch(pointJson.properties.forecastHourly);
     if (!forecastRes.ok) throw new Error(`NWS forecast ${forecastRes.status}`);
 
     const forecastJson = (await forecastRes.json()) as {
@@ -77,14 +68,12 @@ router.get("/weather", async (req, res) => {
       fetchedAt: Date.now(),
     };
 
-    cache = { data, expiresAt: Date.now() + CACHE_MS };
+    (res as any).cacheStore(data);
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch weather");
-    res.status(502).json({ error: "Failed to fetch weather data" });
+    res.status(502).json({ error: "upstream_unavailable", source: "weather" });
   }
 });
 
 export default router;
-
-

@@ -1,17 +1,15 @@
+/**
+ * Aircraft Route
+ * Fetches aircraft positions from adsb.fi using the config-defined center and radius.
+ * Merges flight route data from adsbdb.com and internal aircraft metadata.
+ */
 import { Router } from "express";
 import { logAircraftObservation, getAircraftMeta } from "../db";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
-
-// adsb.fi — free community ADS-B aggregator, no API key, global coverage
-// (includes Hawaii). Replaces OpenSky, whose anonymous API times out from
-// Replit's outbound IPs. Query is a radius around Oahu wide enough to cover
-// the main Bay Area.
-const CENTER = { lat: 37.88, lon: -122.26 };
-const RADIUS_NM = 150;
-
-let cache: { data: unknown; expiresAt: number } | null = null;
-const CACHE_MS = 60 * 1000; // 1 min — adsb.fi is generous, keep it fresh
 
 // ── Flight-route enrichment (adsbdb.com, keyless) ─────────────────────────
 // adsb.fi exposes only the callsign, not the origin/destination. adsbdb maps a
@@ -24,8 +22,7 @@ const MAX_LOOKUPS_PER_REFRESH = 12;
 
 async function lookupRoute(callsign: string): Promise<RouteInfo> {
   try {
-    const r = await fetch(`https://api.adsbdb.com/v0/callsign/${encodeURIComponent(callsign)}`, { headers: { "User-Agent": "MosswoodCommandCenter/1.0" }, signal: AbortSignal.timeout(8000),
-    });
+    const r = await apiFetch(`https://api.adsbdb.com/v0/callsign/${encodeURIComponent(callsign)}`);
     if (!r.ok) return { origin: null, dest: null };
     const j = (await r.json()) as {
       response?: { flightroute?: { origin?: { iata_code?: string }; destination?: { iata_code?: string } } };
@@ -55,16 +52,15 @@ type AdsbAircraft = {
   track?: number;
 };
 
-router.get("/aircraft", async (req, res) => {
+// adsb.fi — free community ADS-B aggregator, no API key, global coverage
+router.get("/aircraft", withCache('aircraft'), async (req, res) => {
+  const cfg = getConfig();
   try {
-    if (cache && Date.now() < cache.expiresAt) {
-      res.json(cache.data);
-      return;
-    }
+    const [lat, lng] = cfg.aircraft.center;
+    const radius = cfg.aircraft.radiusNm;
 
-    const url = `https://opendata.adsb.fi/api/v2/lat/${CENTER.lat}/lon/${CENTER.lon}/dist/${RADIUS_NM}`;
-    const r = await fetch(url, { headers: { "User-Agent": "MosswoodCommandCenter/1.0" }, signal: AbortSignal.timeout(8000),
-    });
+    const url = `https://opendata.adsb.fi/api/v2/lat/${lat}/lon/${lng}/dist/${radius}`;
+    const r = await apiFetch(url);
     if (!r.ok) throw new Error(`adsb.fi ${r.status}`);
 
     const json = (await r.json()) as { aircraft?: AdsbAircraft[]; now?: number };
@@ -117,15 +113,12 @@ router.get("/aircraft", async (req, res) => {
     });
 
     const data = { aircraft: enriched, fetchedAt: Date.now(), dataTime: json.now ?? null };
-    cache = { data, expiresAt: Date.now() + CACHE_MS };
+    (res as any).cacheStore(data);
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch aircraft from adsb.fi");
-    res.json({ aircraft: [], fetchedAt: Date.now(), source: "fallback" });
+    res.status(502).json({ error: "upstream_unavailable", source: "aircraft" });
   }
 });
 
 export default router;
-
-
-

@@ -1,24 +1,13 @@
+/**
+ * Stations Route
+ * Fetches recent METAR observations for config-defined weather stations from the NWS API.
+ */
 import { Router } from "express";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
-
-// Land weather stations we pull temperature/wind from, shown live on the map.
-// Observations come from the National Weather Service (free, no key). Each
-// station's latest METAR-derived observation is fetched and normalized.
-const STATIONS: Array<{ id: string; name: string; lat: number; lng: number }> = [
-  { id: "KOAK", name: "Oakland Intl (OAK)", lat: 37.7213, lng: -122.2208 },
-  { id: "KSFO", name: "San Francisco Intl (SFO)", lat: 37.6197, lng: -122.3647 },
-  { id: "KNUQ", name: "Moffett Federal (NUQ)", lat: 37.4161, lng: -122.0492 },
-  { id: "KCCR", name: "Buchanan Field (Concord)", lat: 37.9897, lng: -122.0569 },
-  { id: "KAPC", name: "Napa County", lat: 38.2132, lng: -122.2807 },
-  { id: "KSUU", name: "Travis AFB (Fairfield)", lat: 38.2627, lng: -121.9272 },
-  { id: "KHWD", name: "Hayward Executive", lat: 37.6592, lng: -122.1217 },
-];
-
-let cache: { data: unknown; expiresAt: number } | null = null;
-const CACHE_MS = 10 * 60 * 1000; // 10 minutes
-
-const UA = "MosswoodCommandCenter/1.0 (contact@example.com)";
 
 type ObsProps = {
   temperature?: { value: number | null };
@@ -34,22 +23,19 @@ function degToCompass(deg: number | null): string | null {
   return dirs[Math.round(deg / 45) % 8];
 }
 
-router.get("/stations", async (req, res) => {
+// Land weather stations we pull temperature/wind from, shown live on the map.
+// Observations come from the National Weather Service (free, no key). Each
+// station's latest METAR-derived observation is fetched and normalized.
+router.get("/stations", withCache('stations'), async (req, res) => {
+  const cfg = getConfig();
   try {
-    if (cache && Date.now() < cache.expiresAt) {
-      res.json(cache.data);
-      return;
-    }
-
     const results = await Promise.all(
-      STATIONS.map(async (s) => {
+      cfg.weatherStations.map(async (s) => {
         try {
           // The /observations/latest record alternates between real METARs and
           // null placeholders (QC flag "Z"), so pull the recent list and pick
           // the newest entry that actually has a temperature.
-          const r = await fetch(
-            `https://api.weather.gov/stations/${s.id}/observations?limit=8`, { signal: AbortSignal.timeout(8000), headers: { "User-Agent": UA } },
-          );
+          const r = await apiFetch(`https://api.weather.gov/stations/${s.id}/observations?limit=8`);
           if (!r.ok) throw new Error(`NWS ${s.id} ${r.status}`);
           const json = (await r.json()) as { features: Array<{ properties: ObsProps }> };
           const feats = json.features ?? [];
@@ -75,14 +61,13 @@ router.get("/stations", async (req, res) => {
     );
 
     const data = { stations: results, fetchedAt: Date.now() };
-    cache = { data, expiresAt: Date.now() + CACHE_MS };
+    (res as any).cacheStore(data);
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch weather stations");
-    res.status(502).json({ error: "Failed to fetch station data" });
+    res.status(502).json({ error: "upstream_unavailable", source: "stations" });
   }
 });
 
 export default router;
-
 

@@ -1,23 +1,31 @@
+/**
+ * Earthquakes Route
+ * Fetches recent earthquakes from USGS near the config center coordinates.
+ */
 import { Router } from "express";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
 
 // USGS Earthquake API — free, no key required
-// Returns recent quakes within ~300km of Berkeley
-router.get("/earthquakes", async (req, res) => {
+// Returns recent quakes within ~300km of the center
+router.get("/earthquakes", withCache('earthquakes'), async (req, res) => {
+  const cfg = getConfig();
+  const [lat, lng] = cfg.location.center;
+
   try {
     const url = new URL("https://earthquake.usgs.gov/fdsnws/event/1/query");
     url.searchParams.set("format", "geojson");
-    url.searchParams.set("latitude", "37.88");
-    url.searchParams.set("longitude", "-122.26");
+    url.searchParams.set("latitude", lat.toString());
+    url.searchParams.set("longitude", lng.toString());
     url.searchParams.set("maxradiuskm", "300");
     url.searchParams.set("minmagnitude", "1.0");
     url.searchParams.set("limit", "20");
     url.searchParams.set("orderby", "time");
 
-    const response = await fetch(url.toString(), { signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": "MosswoodCommandCenter/1.0" },
-    });
+    const response = await apiFetch(url.toString());
 
     if (!response.ok) {
       throw new Error(`USGS responded ${response.status}`);
@@ -46,12 +54,13 @@ router.get("/earthquakes", async (req, res) => {
       depth: f.geometry.coordinates[2],
     }));
 
-    res.json({ quakes, fetchedAt: Date.now() });
+    const data = { quakes, fetchedAt: Date.now() };
+    (res as any).cacheStore(data);
+    res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch earthquakes");
-    res.status(502).json({ error: "Failed to fetch earthquake data" });
+    res.status(502).json({ error: "upstream_unavailable", source: "earthquakes" });
   }
 });
 
 export default router;
-

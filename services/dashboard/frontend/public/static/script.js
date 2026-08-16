@@ -80,7 +80,6 @@ var turbulenceLayer = L.layerGroup();
 var airportLayer    = L.layerGroup();
 var tideLayer       = L.layerGroup();
 var bayTideLayer = L.layerGroup();
-var shipLayer       = L.featureGroup();
 var hazardTextLayer = L.layerGroup();
 // Dense bathymetry — only added to map during Traffic Combined zoom-in
 var denseDepthLayer = L.layerGroup();
@@ -247,110 +246,53 @@ function distToShoreKm(lat, lng) {
 }
 
 
-// =====================================================================
-// DENSE BATHYMETRY — zoomed Golden Gate / Bay entrance (~zoom 12)
-// Much finer 0.022° grid with near-shore shelf gradient
-// =====================================================================
-const rngD = makeSeededRng(0xC0FFEE99);
-for (let lat = 37.60; lat <= 37.90; lat += 0.022) {
-    for (let lng = -122.70; lng <= -122.35; lng += 0.028) {
-        const jLat = lat + (rngD() - 0.5) * 0.010;
-        const jLng = lng + (rngD() - 0.5) * 0.014;
-        if (isOnLand(jLat, jLng)) continue;
 
-        // Use true distance to the nearest coastline for the depth gradient
-        const kmOff = distToShoreKm(jLat, jLng);
-        let depth;
-        // NorCal continental shelf profile (gradual slope, not volcanic)
-        // Based on NOAA Chart 18649 (Farallon Islands to Bay entrance)
-        if (kmOff < 1)         depth = 8 + kmOff * 40;             // 0-1km: 8-48 ft
-        else if (kmOff < 5)    depth = 48 + (kmOff - 1) * 60;      // 1-5km: 48-288 ft (8-48 fm)
-        else if (kmOff < 15)   depth = 288 + (kmOff - 5) * 80;     // 5-15km: 288-1088 ft (48-181 fm)
-        else if (kmOff < 40)   depth = 1088 + (kmOff - 15) * 40;   // 15-40km: 1088-2088 ft (shelf edge)
-        else                   depth = 2088 + (kmOff - 40) * 100;  // 40+km: 2088+ ft (off shelf)
+function generateBathymetryGrid(layer, latStart, latEnd, latStep, lngStart, lngEnd, lngStep, jLatFactor, jLngFactor, seed, getDepth, iconClass, iconSize, iconAnchor) {
+    const rngGen = makeSeededRng(seed);
+    for (let lat = latStart; lat <= latEnd; lat += latStep) {
+        for (let lng = lngStart; lng <= lngEnd; lng += lngStep) {
+            const jLat = lat + (rngGen() - 0.5) * jLatFactor;
+            const jLng = lng + (rngGen() - 0.5) * jLngFactor;
+            if (isOnLand(jLat, jLng)) continue;
 
-        // Add randomized variation for rugged seafloor terrain
-        depth += (rngD() - 0.5) * (depth * 0.20); 
-        depth = Math.floor(Math.max(6, depth));
-        
-        // Convert depth (feet) to Fathoms & Feet for authentic maritime chart representation
-        const fm = Math.floor(depth / 6);
-        const ft = Math.floor(depth % 6);
-        // Show feet as subscript if < 30 fathoms, otherwise just fathoms
-        const html = fm < 30 && ft > 0 ? `${fm}<sub>${ft}</sub>` : `${fm}`;
+            const kmOff = distToShoreKm(jLat, jLng);
+            let depth = getDepth(kmOff);
 
-        L.marker([jLat, jLng], {
-            pane: 'depthPane',
-            icon: L.divIcon({ className: 'depth-label depth-label-dense', html: html, iconSize: [36, 14] })
-        }).addTo(denseDepthLayer);
+            depth += (rngGen() - 0.5) * (depth * 0.20); 
+            depth = Math.floor(Math.max(6, depth));
+            
+            const fm = Math.floor(depth / 6);
+            const ft = Math.floor(depth % 6);
+            const html = fm < 30 && ft > 0 ? `${fm}<sub>${ft}</sub>` : `${fm}`;
+
+            const iconOpts = { className: iconClass, html: html, iconSize: iconSize };
+            if (iconAnchor) iconOpts.iconAnchor = iconAnchor;
+
+            L.marker([jLat, jLng], {
+                pane: 'depthPane',
+                icon: L.divIcon(iconOpts)
+            }).addTo(layer);
+        }
     }
 }
+const getDenseDepth = kmOff => {
+    if (kmOff < 1) return 8 + kmOff * 40;
+    if (kmOff < 5) return 48 + (kmOff - 1) * 60;
+    if (kmOff < 15) return 288 + (kmOff - 5) * 80;
+    if (kmOff < 40) return 1088 + (kmOff - 15) * 40;
+    return 2088 + (kmOff - 40) * 100;
+};
+const getSuperDenseDepth = kmOff => {
+    if (kmOff < 1) return 10 + kmOff * 80;
+    if (kmOff < 3) return 90 + (kmOff - 1) * 350;
+    if (kmOff < 8) return 790 + (kmOff - 3) * 350;
+    if (kmOff < 20) return 2540 + (kmOff - 8) * 250;
+    return 5540 + (kmOff - 20) * 150;
+};
 
-// =====================================================================
-// SUPER DENSE BATHYMETRY - super zoomed Golden Gate / Bay Bridge view
-// =====================================================================
-const rngSD = makeSeededRng(0xBEEFCAFE);
-
-for (let lat = 37.78; lat <= 37.86; lat += 0.005) {
-    for (let lng = -122.55; lng <= -122.38; lng += 0.006) {
-        const jLat = lat + (rngSD() - 0.5) * 0.002;
-        const jLng = lng + (rngSD() - 0.5) * 0.003;
-        if (isOnLand(jLat, jLng)) continue;
-
-        const kmOff = distToShoreKm(jLat, jLng);
-        let depth;
-        if (kmOff < 1)         depth = 10 + kmOff * 80;
-        else if (kmOff < 3)    depth = 90 + (kmOff - 1) * 350;
-        else if (kmOff < 8)    depth = 790 + (kmOff - 3) * 350;
-        else if (kmOff < 20)   depth = 2540 + (kmOff - 8) * 250;
-        else                   depth = 5540 + (kmOff - 20) * 150;
-
-        depth += (rngSD() - 0.5) * (depth * 0.20); 
-        depth = Math.floor(Math.max(6, depth));
-        
-        const fm = Math.floor(depth / 6);
-        const ft = Math.floor(depth % 6);
-        const html = fm < 30 && ft > 0 ? `${fm}<sub>${ft}</sub>` : `${fm}`;
-
-        L.marker([jLat, jLng], {
-            pane: 'depthPane',
-            icon: L.divIcon({ className: 'depth-label depth-label-dense', html: html, iconSize: [24, 14], iconAnchor: [12, 7] })
-        }).addTo(superDenseDepthLayer);
-    }
-}
-
-// =====================================================================
-// SPARSE BATHYMETRY - hazard page
-// =====================================================================
-const rngSparse = makeSeededRng(0xDEADBEEF);
-
-for (let lat = 37.25; lat <= 38.30; lat += 0.15) {
-    for (let lng = -123.20; lng <= -121.70; lng += 0.15) {
-        const jLat = lat + (rngSparse() - 0.5) * 0.05;
-        const jLng = lng + (rngSparse() - 0.5) * 0.05;
-        if (isOnLand(jLat, jLng)) continue;
-
-        const kmOff = distToShoreKm(jLat, jLng);
-        let depth;
-        if (kmOff < 1)         depth = 10 + kmOff * 80;
-        else if (kmOff < 3)    depth = 90 + (kmOff - 1) * 350;
-        else if (kmOff < 8)    depth = 790 + (kmOff - 3) * 350;
-        else if (kmOff < 20)   depth = 2540 + (kmOff - 8) * 250;
-        else                   depth = 5540 + (kmOff - 20) * 150;
-
-        depth += (rngSparse() - 0.5) * (depth * 0.20); 
-        depth = Math.floor(Math.max(6, depth));
-        
-        const fm = Math.floor(depth / 6);
-        const ft = Math.floor(depth % 6);
-        const html = fm < 30 && ft > 0 ? `${fm}<sub>${ft}</sub>` : `${fm}`;
-
-        L.marker([jLat, jLng], {
-            pane: 'depthPane',
-            icon: L.divIcon({ className: 'depth-label depth-label-dense', html: html, iconSize: [24, 14], iconAnchor: [12, 7] })
-        }).addTo(sparseDepthLayer);
-    }
-}
+generateBathymetryGrid(denseDepthLayer, 37.60, 37.90, 0.022, -122.70, -122.35, 0.028, 0.010, 0.014, 0xC0FFEE99, getDenseDepth, 'depth-label depth-label-dense', [36, 14], null);
+generateBathymetryGrid(superDenseDepthLayer, 37.78, 37.86, 0.005, -122.55, -122.38, 0.006, 0.002, 0.003, 0xBEEFCAFE, getSuperDenseDepth, 'depth-label depth-label-dense', [24, 14], [12, 7]);
+generateBathymetryGrid(sparseDepthLayer, 37.25, 38.30, 0.15, -123.20, -121.70, 0.15, 0.05, 0.05, 0xDEADBEEF, getSuperDenseDepth, 'depth-label depth-label-dense', [24, 14], [12, 7]);
 
 // =====================================================================
 // STATIC NOAA BUOY LABELS (always on map)
@@ -640,87 +582,43 @@ function updateSurfLabels(buoys) {
 // WIND VECTORS — populated live from PacIOOS WRF ERDDAP
 async function fetchWind() {
     return; // No NorCal ERDDAP equivalent currently
-    try {
-        const r = await fetch("https://pae-paha.pacioos.hawaii.edu/erddap/griddap/wrf_hi.json?Uwind[(last)][(18.5):3:(22.5)][(-160.5):3:(-154.5)],Vwind[(last)][(18.5):3:(22.5)][(-160.5):3:(-154.5)]");
-        if (!r.ok) throw new Error(r.status);
-        const data = await r.json();
-        
-        windLayer.clearLayers();
-        
-        for (const row of data.table.rows) {
-            const lat = row[1];
-            const lng = row[2];
-            const u = row[3];
-            const v = row[4];
-            
-            if (u == null || v == null) continue;
-            // Removed land masking as requested by user
-            
-            const speed_ms = Math.sqrt(u*u + v*v);
-            const speed_mph = speed_ms * 2.23694;
-            
-            let color = '#0055ff'; // 0-3
-            if (speed_mph > 3) color = '#00aaff';
-            if (speed_mph > 6) color = '#00ffff';
-            if (speed_mph > 9) color = '#55ffaa';
-            if (speed_mph > 12) color = '#aaff55';
-            if (speed_mph > 15) color = '#ffff00';
-            if (speed_mph > 18) color = '#ffaa00';
-            if (speed_mph > 21) color = '#ff5500';
-            if (speed_mph > 24) color = '#ff0000';
-            if (speed_mph > 27) color = '#cc0000';
 
-            const angle = Math.atan2(u, v) * (180 / Math.PI);
-            
-            const svgIcon = L.divIcon({
-                html: `<svg viewBox="0 0 24 24" style="width:26px;height:26px;transform:rotate(${angle}deg); overflow:visible;">
-                    <!-- Thick dark outline for contrast -->
-                    <path d="M12 2L12 22M12 2L7 7M12 2L17 7" stroke="rgba(0,0,0,0.8)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                    <!-- Bright inner stroke -->
-                    <path d="M12 2L12 22M12 2L7 7M12 2L17 7" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                </svg>`,
-                className: '',
-                iconSize: [26, 26],
-                iconAnchor: [13, 13]
-            });
-            
-            L.marker([lat, lng], { icon: svgIcon, interactive: false }).addTo(windLayer);
-        }
-    } catch(e) { console.warn('Wind fetch:', e); }
 }
 
-function isPointInPolygons(lat, lng, polys) {
-    for (const poly of polys) {
-        if (pointInPolygon([lat, lng], poly)) return true;
-    }
     return false;
 }
 
-function pointInPolygon(point, vs) {
-    let x = point[0], y = point[1];
-    let inside = false;
-    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-        let xi = vs[i][0], yi = vs[i][1];
-        let xj = vs[j][0], yj = vs[j][1];
-        let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-        if (intersect) inside = !inside;
-    }
     return inside;
 }
 
 // Ocean currents: REMOVED — no free real-time current API available
 //   (would need HYCOM or NOAA CoastWatch model; flagged to operator)
-// Ships: REMOVED — no live AIS feed; shipLayer starts empty
 //   (needs MarineTraffic API key or on-site SDR-AIS receiver)
 // =====================================================================
-// windLayer and shipLayer are populated at runtime by their fetch functions
 
 // =====================================================================
 // LIVE DATA STORE
 // =====================================================================
-var liveData = { weather: null, buoys: null, quakes: null, alerts: null, turbulence: null, airquality: null, aircraft: [], ships: [], shipsConnected: false, stations: [], currents: null, tide: null };
+var liveData = { weather: null, buoys: null, quakes: null, alerts: null, turbulence: null, airquality: null, aircraft: [], stations: [], currents: null, tide: null };
 
 let trafficHistory = {};
+
+function gcTrafficHistory() {
+    const now = Date.now();
+    for (const id in trafficHistory) {
+        const hist = trafficHistory[id];
+        if (hist.length > 0) {
+            const lastTime = hist[hist.length - 1][2] || 0;
+            if (now - lastTime > 30 * 60 * 1000) {
+                delete trafficHistory[id];
+            }
+        } else {
+            delete trafficHistory[id];
+        }
+    }
+}
+setInterval(gcTrafficHistory, 5 * 60 * 1000);
+
 const BREADCRUMB_LIMIT = 7; // ~1 minute at 10-second intervals
 
 function recordTrafficBreadcrumb(id, lat, lng) {
@@ -854,56 +752,9 @@ async function fetchBuoys() {
     } catch(e) { console.warn('Buoy fetch:', e); }
 }
 
-const activeShips = {};
 
 // Live AIS vessels (AISStream via our server). Renders nothing — and the panel
 // shows an "offline" notice — until AISSTREAM_API_KEY is configured.
-async function fetchShips() {
-    try {
-        const r = await fetch('/api/ships');
-        if (!r.ok) throw new Error(r.status);
-        const data = await r.json();
-        liveData.ships = data.ships || [];
-        liveData.shipsConnected = !!data.connected;
-
-        const seenIds = new Set();
-        liveData.ships.forEach(v => {
-            if (v.lat == null || v.lng == null) return;
-            const id = String(v.mmsi || v.name);
-            seenIds.add(id);
-            recordTrafficBreadcrumb(id, v.lat, v.lng);
-            drawBreadcrumbs(id, shipLayer, '#ff9f43');
-
-            const rot = v.cog != null ? v.cog : (v.heading != null ? v.heading : 0);
-            const offshore = !isVesselInPort(v);
-            const arrowStyle = `transform:rotate(${rot}deg);` + (offshore ? ` font-size:26px; color:#ff9f43; text-shadow: 0 0 12px #ff9f43, 0 0 4px #000; margin-right: 2px;` : ` font-size:18px; color:#ff9f43; text-shadow: 0 0 4px #000; margin-right: 2px;`);
-            const html = `<div class="ship-pin" title="${v.name}">
-                <span class="ship-arrow" style="${arrowStyle}">➤ </span>
-                <span class="ship-name">${v.name}</span>
-            </div>`;
-            
-            const iconObj = L.divIcon({ className: '', html, iconSize: [120, 18], iconAnchor: [9, 9] });
-            if (!activeShips[id]) {
-                activeShips[id] = L.marker([v.lat, v.lng], { pane: 'trafficPane', icon: iconObj }).addTo(shipLayer);
-            } else {
-                activeShips[id].setLatLng([v.lat, v.lng]);
-                activeShips[id].setIcon(iconObj);
-            }
-        });
-        
-        // Cleanup stale ships
-        for (const id in activeShips) {
-            if (!seenIds.has(id)) {
-                shipLayer.removeLayer(activeShips[id]);
-                delete activeShips[id];
-                if (activeBreadcrumbs[id]) {
-                    activeBreadcrumbs[id].forEach(p => shipLayer.removeLayer(p));
-                    delete activeBreadcrumbs[id];
-                }
-            }
-        }
-    } catch(e) { console.warn('Ship fetch:', e); }
-}
 
 // Land weather stations we pull temp/wind from (NWS). Shown on the map during
 // the meteorological views so the data's origin is visible.
@@ -1504,31 +1355,7 @@ function renderAviationItem(item) {
     </div>`;
 }
 
-// AIS ship-type code → human label (ITU-R M.1371 first-digit classes).
-function shipTypeLabel(t) {
-    if (t == null) return 'Vessel';
-    if (t === 30) return 'Fishing';
-    if (t === 35) return 'Military';
-    if (t === 36) return 'Sailing';
-    if (t === 37) return 'Pleasure craft';
-    if (t === 50) return 'Pilot';
-    if (t === 51) return 'Search & rescue';
-    if (t === 52) return 'Tug';
-    if (t === 55) return 'Law enforcement';
-    if (t >= 60 && t <= 69) return 'Passenger';
-    if (t >= 70 && t <= 79) return 'Cargo';
-    if (t >= 80 && t <= 89) return 'Tanker';
-    return 'Vessel';
-}
 
-// Helper to check if a vessel is likely in port/harbor
-function isVesselInPort(v) {
-    if (v.sog != null && v.sog >= 1.0) return false;
-    const hDist = Math.hypot((v.lat - 37.88)*111, (v.lng - -122.26)*87); // Distance from Berkeley
-    const pDist = Math.hypot((v.lat - 37.80)*111, (v.lng - -122.28)*87); // Distance from Oakland port
-    const bDist = Math.hypot((v.lat - 37.81)*111, (v.lng - -122.41)*87); // Distance from SF
-    return hDist < 2.5 || pDist < 4.0 || bDist < 2.5;
-}
 
 // ── COMBINED TRAFFIC items (aircraft + live AIS vessels) ──────────────
 function getTrafficItems() {
@@ -1541,22 +1368,6 @@ function getTrafficItems() {
     getAviationItems()
         .filter(a => a.lat != null && a.lng != null && b.contains([a.lat, a.lng]))
         .forEach(a => items.push({ icon: a.type, name: a.call, detail: `${a.alt}`, sub: a.route, color: a.type === '🚁' ? '#ffd32a' : '#1dd1a1' }));
-        
-    const ships = (liveData.ships || [])
-        .filter(v => v.lat != null && v.lng != null && b.contains([v.lat, v.lng]))
-        .filter(v => currView !== 'oahu' || !isVesselInPort(v))
-        .sort((a, b) => (b.sog || 0) - (a.sog || 0));
-
-    if (ships.length) {
-        ships.forEach(v => items.push({
-            icon: '🚢', name: v.name,
-            detail: v.sog != null ? `${v.sog.toFixed(1)} kt` : '--',
-            sub: shipTypeLabel(v.type), color: '#0984e3'
-        }));
-    } else {
-        items.push({ icon: '⚓', name: 'AIS OFFLINE', detail: '–',
-            sub: 'Set AISSTREAM_API_KEY for live vessels', color: '#636e72' });
-    }
     return items;
 }
 
@@ -1565,17 +1376,6 @@ function getBayTrafficItems() {
     // Tightly match the map zoom bounds (Oakland Estuary to past Golden Gate)
     const b = L.latLngBounds([37.75, -122.55], [37.85, -122.35]);
 
-    // Filter Ships
-    (liveData.ships || []).forEach(v => {
-        if (v.lat != null && v.lng != null && b.contains([v.lat, v.lng])) {
-            items.push({
-                icon: '🚢', name: v.name,
-                detail: v.sog != null ? `${v.sog.toFixed(1)} kt` : '--',
-                sub: shipTypeLabel(v.type), color: '#0984e3',
-                raw: v
-            });
-        }
-    });
 
     // Filter Aircraft
     (liveData.aircraft || []).forEach(a => {
@@ -1649,33 +1449,39 @@ function renderBayTrafficCard(item) {
     </div>`;
 }
 
-function getShipItems() {
-    const ships = liveData.ships || [];
-    if (!ships.length) return [{ noAis: true }];
-    return ships
-        .slice().sort((a, b) => (b.sog || 0) - (a.sog || 0)).slice(0, 12)
-        .map(v => ({
-            name: v.name,
-            type: shipTypeLabel(v.type),
-            area: v.dest ? `→ ${v.dest}` : 'Bay Area waters',
-            spd: v.sog != null ? `${v.sog.toFixed(1)} kt` : '--'
-        }));
-}
-function renderShipItem(item) {
-    if (item.noAis) return `<div class="data-row" style="border-left-color:#636e72;">
-        <div>
-            <div class="row-primary" style="color:#636e72;">⚓ No Live Vessels</div>
-            <div class="row-secondary">Set AISSTREAM_API_KEY to stream live AIS traffic</div>
-        </div>
-        <div class="row-meta" style="color:#636e72;">OFFLINE</div>
-    </div>`;
-    const color = '#0984e3';
-    return `<div class="data-row" style="border-left-color:${color};">
-        <div><div class="row-primary">🚢 ${item.name}</div><div class="row-secondary">${item.type} · ${item.area}</div></div>
-        <div class="row-meta">${item.spd}</div>
-    </div>`;
+
+
+function showFullscreenOverlay(elementId, imgId, imageUrl) {
+    let el = document.getElementById(elementId);
+    if (!el) {
+        el = document.createElement('div');
+        el.id = elementId;
+        el.style.position = 'absolute';
+        el.style.inset = '0';
+        el.style.zIndex = '9999';
+        el.style.pointerEvents = 'none';
+        el.style.background = '#000';
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.8s ease-in-out';
+        el.innerHTML = `<img id="${imgId}" style="width:100%; height:100%; object-fit:contain;">`;
+        document.getElementById('viewport-scaler').appendChild(el);
+    }
+    const targetUrl = imageUrl + "?t=" + Math.floor(Date.now() / 300000);
+    const img = document.getElementById(imgId);
+    if (img.src !== targetUrl) {
+        img.src = targetUrl;
+    }
+    el.style.display = 'block';
+    void el.offsetWidth;
+    el.style.opacity = '1';
+    document.getElementById('main-dash').classList.add('hud-hidden');
 }
 
+function hideFullscreenOverlay(elementId) {
+    const el = document.getElementById(elementId);
+    if (el) el.style.opacity = '0';
+    document.getElementById('main-dash').classList.remove('hud-hidden');
+}
 
 // =====================================================================
 // UI STATE MACHINE
@@ -1722,12 +1528,6 @@ function startBottomTrafficHUD(mode) {
             items = getAviationItems()
                 .filter(a => a.lat != null && a.lng != null && b.contains([a.lat, a.lng]))
                 .map(a => ({ icon: a.type, name: a.call, detail: `${a.alt} ${a.spd}`, sub: a.route, color: a.type === '🚁' ? '#ffd32a' : '#1dd1a1' }));
-        } else if (mode === 'ship') {
-            const b = L.latLngBounds([[37.0, -123.0], [38.5, -121.5]]);
-            items = (liveData.ships || [])
-                .filter(v => v.lat != null && v.lng != null && b.contains([v.lat, v.lng]))
-                .sort((a, b) => (b.sog || 0) - (a.sog || 0))
-                .map(v => ({ icon: '🚢', name: v.name, detail: v.sog != null ? `${v.sog.toFixed(1)} kt` : '--', sub: shipTypeLabel(v.type), color: '#0984e3' }));
         }
         
         const displayItems = items.slice(0, 4);
@@ -1903,7 +1703,7 @@ const uiStates = [
     {
         title: "METEOROLOGICAL", sub: "NWS RADAR · WIND VECTOR · STATIONS", duration: 17250,
         layersOn:  [radarLayerGroup, stationLayer, windLayer, dynamicAlertMarkers, airLayer],
-        layersOff: [shipLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer],
+        layersOff: [buoyLayer, quakeLayer, lightningLayer, denseDepthLayer],
         renderStatic: () => '',
         onEnter() { 
             fetchAirport();
@@ -1926,7 +1726,7 @@ const uiStates = [
     {
         id: 'state-surf',
         title: "SURF & OCEAN", sub: "NDBC · WAVE + BUOY + CURRENTS", duration: 13500,
-        layersOn:  [buoyLayer, surfLayer, currentLayer, tideLayer, dynamicAlertMarkers, waveLayer, shipLayer],
+        layersOn:  [buoyLayer, surfLayer, currentLayer, tideLayer, dynamicAlertMarkers, waveLayer],
         layersOff: [radarLayerGroup, aqiLayer, airLayer, quakeLayer, lightningLayer, denseDepthLayer, windLayer],
         renderStatic() {
             const buoys  = liveData.buoys || [];
@@ -2020,7 +1820,7 @@ const uiStates = [
             ${oceanWarningsHtml}
             ${surfForecastHtml}`;
         },
-        onEnter() { setSurfMode('large'); updateLegend('wave'); startBottomTrafficHUD('ship'); },   // big boxed cards + declutter
+        onEnter() { setSurfMode('large'); updateLegend('wave'); startBottomTrafficHUD('air'); },   // big boxed cards + declutter
         onExit()  { setSurfMode('small'); updateLegend('none'); stopBottomTrafficHUD(); }    // compact pins everywhere else
     },
     // 🟢 2: TRAFFIC – OAKLAND ESTUARY and PORT 🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢🟢
@@ -2028,7 +1828,7 @@ const uiStates = [
         id: 'state-traffic',
         title: "TRAFFIC — COMBINED", sub: "OAKLAND ESTUARY and PORT", pageSize: 6, holdExtraMs: 3300,
         view: 'bay-zoom',
-        layersOn:  [airLayer, shipLayer, superDenseDepthLayer, airportLayer, radarLayerGroup, bayTideLayer],
+        layersOn:  [airLayer, superDenseDepthLayer, airportLayer, radarLayerGroup, bayTideLayer],
         layersOff: [aqiLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer],
         getItems: getBayTrafficItems, renderItem: renderBayTrafficCard
     },
@@ -2038,7 +1838,7 @@ const uiStates = [
         title: "HAZARD MONITOR", sub: "SEISMIC ∙ LIGHTNING ∙ ALERTS ∙ TURBULENCE ∙ ROMS TEMP", perPageMs: 3500, pageSize: 4, holdExtraMs: 4000,
         view: 'wide',
         layersOn:  [quakeLayer, lightningLayer, alertLayer, turbulenceLayer, hazardTextLayer, romsTempLayer],
-        layersOff: [radarLayerGroup, aqiLayer, airLayer, shipLayer, buoyLayer, denseDepthLayer, sparseDepthLayer, deepOceanAirLayer],
+        layersOff: [radarLayerGroup, aqiLayer, airLayer, buoyLayer, denseDepthLayer, sparseDepthLayer, deepOceanAirLayer],
         getItems: getDeepOceanFlightItems, renderItem: renderDeepOceanFlightItem,
         onEnter() { fetchAirport(); updateLegend('roms'); updateSFOBox(); },
         onExit()  { updateLegend('none'); hideSFOBox(); },
@@ -2063,47 +1863,9 @@ const uiStates = [
         title: "SATELLITE — GOES-WEST", sub: "LAST 12 HOURS · GEOCOLOR", duration: 10000,
         view: 'wide',
         layersOn:  [],
-        layersOff: [radarLayerGroup, aqiLayer, airLayer, shipLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer, alertLayer, turbulenceLayer],
-        onEnter() {
-            let el = document.getElementById('goes-satellite');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'goes-satellite';
-                el.style.position = 'absolute';
-                el.style.inset = '0';
-                el.style.zIndex = '9999';
-                el.style.pointerEvents = 'none';
-                el.style.background = '#000';
-                el.style.opacity = '0';
-                el.style.transition = 'opacity 0.8s ease-in-out';
-                // Append an img
-                el.innerHTML = '<img id="goes-img" style="width:100%; height:100%; object-fit:contain;">';
-                document.getElementById('viewport-scaler').appendChild(el);
-            }
-            // Update the src ONLY if the 5-minute window has passed, to avoid reloading the GIF
-            const cacheBuster = Math.floor(Date.now() / 300000);
-            const targetUrl = "https://cdn.star.nesdis.noaa.gov/GOES18/ABI/SECTOR/psw/GEOCOLOR/GOES18-PSW-GEOCOLOR-600x600.gif?t=" + cacheBuster;
-            const img = document.getElementById('goes-img');
-            if (img.src !== targetUrl) {
-                img.src = targetUrl;
-            }
-            
-            // Force reflow and fade in
-            el.style.display = 'block';
-            void el.offsetWidth;
-            el.style.opacity = '1';
-            
-            document.getElementById('main-dash').classList.add('hud-hidden');
-        },
-        onExit() {
-            const el = document.getElementById('goes-satellite');
-            if (el) {
-                el.style.opacity = '0';
-                // We keep display: block so the browser doesn't drop the GIF decoded frames from memory,
-                // but pointer-events: none ensures it doesn't block anything.
-            }
-            document.getElementById('main-dash').classList.remove('hud-hidden');
-        },
+        layersOff: [radarLayerGroup, aqiLayer, airLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer, alertLayer, turbulenceLayer],
+        onEnter() { showFullscreenOverlay('goes-satellite', 'goes-img', 'https://cdn.star.nesdis.noaa.gov/GOES18/ABI/SECTOR/psw/GEOCOLOR/GOES18-PSW-GEOCOLOR-600x600.gif'); },
+        onExit() { hideFullscreenOverlay('goes-satellite'); },
         renderStatic() { return ''; }
     },
     // ── 11: RADAR — NWS BAY AREA LOOP ────────────────────────────────────
@@ -2111,45 +1873,9 @@ const uiStates = [
         title: "RADAR — NWS MRMS", sub: "BAY AREA REGIONAL LOOP", duration: 8000,
         view: 'wide',
         layersOn:  [],
-        layersOff: [radarLayerGroup, aqiLayer, airLayer, shipLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer, alertLayer, turbulenceLayer],
-        onEnter() {
-            let el = document.getElementById('nws-radar-loop');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'nws-radar-loop';
-                el.style.position = 'absolute';
-                el.style.inset = '0';
-                el.style.zIndex = '9999';
-                el.style.pointerEvents = 'none';
-                el.style.background = '#000';
-                el.style.opacity = '0';
-                el.style.transition = 'opacity 0.8s ease-in-out';
-                // Append an img
-                el.innerHTML = '<img id="nws-radar-img" style="width:100%; height:100%; object-fit:contain;">';
-                document.getElementById('viewport-scaler').appendChild(el);
-            }
-            // Update the src ONLY if the 5-minute window has passed, to avoid reloading the GIF
-            const cacheBuster = Math.floor(Date.now() / 300000);
-            const targetUrl = "https://radar.weather.gov/ridge/standard/PACIFICSOUTHWEST_loop.gif?t=" + cacheBuster;
-            const img = document.getElementById('nws-radar-img');
-            if (img.src !== targetUrl) {
-                img.src = targetUrl;
-            }
-            
-            // Force reflow and fade in
-            el.style.display = 'block';
-            void el.offsetWidth;
-            el.style.opacity = '1';
-            
-            document.getElementById('main-dash').classList.add('hud-hidden');
-        },
-        onExit() {
-            const el = document.getElementById('nws-radar-loop');
-            if (el) {
-                el.style.opacity = '0';
-            }
-            document.getElementById('main-dash').classList.remove('hud-hidden');
-        },
+        layersOff: [radarLayerGroup, aqiLayer, airLayer, buoyLayer, quakeLayer, lightningLayer, denseDepthLayer, alertLayer, turbulenceLayer],
+        onEnter() { showFullscreenOverlay('nws-radar-loop', 'nws-radar-img', 'https://radar.weather.gov/ridge/standard/PACIFICSOUTHWEST_loop.gif'); },
+        onExit() { hideFullscreenOverlay('nws-radar-loop'); },
         renderStatic() { return ''; }
     },
 
@@ -2193,7 +1919,7 @@ function transitionState() {
         stationLayer, surfLayer, currentLayer, alertLayer, turbulenceLayer, 
         airportLayer, hazardTextLayer, quakeLayer, lightningLayer, denseDepthLayer,
         superDenseDepthLayer, sparseDepthLayer, deepOceanAirLayer, romsTempLayer,
-        aqiLayer, airLayer, shipLayer, buoyLayer, tideLayer, bayTideLayer, radarLayerGroup,
+        aqiLayer, airLayer, buoyLayer, tideLayer, bayTideLayer, radarLayerGroup,
         windLayer, waveLayer
     ].forEach(l => {
         if (!state.layersOn || state.layersOn.indexOf(l) === -1) {
@@ -2313,7 +2039,6 @@ function transitionState() {
 // =====================================================================
 // Non-blocking fetches (slow/rate-limited APIs - don't hold up the boot)
 fetchAircraft();
-fetchShips();
 fetchStations();
 fetchCurrents();
 fetchTide();
@@ -2328,18 +2053,17 @@ Promise.race([
     // Start rotation immediately after base data loads
     transitionState();
     setInterval(fetchWeather,     5 * 60 * 1000);
-    setInterval(fetchBuoys,       5 * 60 * 1000);
-    setInterval(fetchQuakes,      5 * 60 * 1000);
-    setInterval(fetchAlerts,      5 * 60 * 1000);
-    setInterval(fetchTurbulence,  5 * 60 * 1000);
-    setInterval(fetchAirQuality,  5 * 60 * 1000);
+    setTimeout(() => setInterval(fetchBuoys,       5 * 60 * 1000), 2000);
+    setTimeout(() => setInterval(fetchQuakes,      5 * 60 * 1000), 4000);
+    setTimeout(() => setInterval(fetchAlerts,      5 * 60 * 1000), 6000);
+    setTimeout(() => setInterval(fetchTurbulence,  5 * 60 * 1000), 8000);
+    setTimeout(() => setInterval(fetchAirQuality,  5 * 60 * 1000), 10000);
     setInterval(fetchAircraft,        10 * 1000); // Traffic is real-time
-    setInterval(fetchShips,           10 * 1000); // Traffic is real-time
-    setInterval(fetchStations,    5 * 60 * 1000);
-    setInterval(fetchCurrents,    5 * 60 * 1000); // marine model updates slowly
-    setInterval(fetchTide,        5 * 60 * 1000);
-    setInterval(fetch7DayForecast, 60 * 60 * 1000); // refresh hourly
-    setInterval(fetchBaySurfForecast, 60 * 60 * 1000); // refresh hourly
+    setTimeout(() => setInterval(fetchStations,    5 * 60 * 1000), 12000);
+    setTimeout(() => setInterval(fetchCurrents,    5 * 60 * 1000), 14000);
+    setTimeout(() => setInterval(fetchTide,        5 * 60 * 1000), 16000);
+    setTimeout(() => setInterval(fetch7DayForecast, 60 * 60 * 1000), 18000);
+    setTimeout(() => setInterval(fetchBaySurfForecast, 60 * 60 * 1000), 20000);
 });
 
 // --- RASPBERRY PI HARDWARE DEGRADATION & KIOSK MANAGEMENT ---

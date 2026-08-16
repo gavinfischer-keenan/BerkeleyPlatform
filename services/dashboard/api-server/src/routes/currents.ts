@@ -1,19 +1,13 @@
+/**
+ * Currents Route
+ * Fetches ocean surface currents from the Open-Meteo Marine model for config-defined points.
+ */
 import { Router } from "express";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
-
-// Ocean surface currents from the Open-Meteo Marine model (keyless, global).
-// Returns model-derived current speed + direction at a spread of offshore
-// points around the Bay Area. Cached server-side because
-// the marine model only updates a few times per day.
-const POINTS = [
-  { name: "Golden Gate Approach", lat: 37.78, lng: -122.60 },
-  { name: "Point Reyes", lat: 38.00, lng: -123.05 },
-  { name: "Farallon Islands", lat: 37.70, lng: -123.00 },
-  { name: "Half Moon Bay Offshore", lat: 37.40, lng: -122.65 },
-  { name: "Bodega Bay", lat: 38.30, lng: -123.10 },
-  { name: "South Bay Mouth", lat: 37.55, lng: -122.40 },
-];
 
 const ARROWS = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"];
 // ocean_current_direction = the compass heading the current flows TOWARD.
@@ -29,14 +23,11 @@ type MarineCurrent = {
   };
 };
 
-let cache: { data: unknown; expiresAt: number } | null = null;
-const CACHE_MS = 30 * 60 * 1000;
-
-async function fetchPoint(p: (typeof POINTS)[number]) {
+async function fetchPoint(p: { name: string; lat: number; lon: number }) {
   const url =
-    `https://marine-api.open-meteo.com/v1/marine?latitude=${p.lat}&longitude=${p.lng}` +
+    `https://marine-api.open-meteo.com/v1/marine?latitude=${p.lat}&longitude=${p.lon}` +
     `&current=ocean_current_velocity,ocean_current_direction,sea_level_height_msl&timezone=auto`;
-  const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const r = await apiFetch(url);
   if (!r.ok) throw new Error(`Open-Meteo marine ${r.status}`);
   const j = (await r.json()) as MarineCurrent;
   const c = j.current ?? {};
@@ -46,7 +37,7 @@ async function fetchPoint(p: (typeof POINTS)[number]) {
   return {
     name: p.name,
     lat: p.lat,
-    lng: p.lng,
+    lng: p.lon,
     speedKt: kt,
     dirDeg: dir,
     arrow: dir != null ? arrowFor(dir) : "·",
@@ -54,14 +45,14 @@ async function fetchPoint(p: (typeof POINTS)[number]) {
   };
 }
 
-router.get("/currents", async (req, res) => {
+// Ocean surface currents from the Open-Meteo Marine model (keyless, global).
+// Returns model-derived current speed + direction at a spread of offshore
+// points around the Bay Area. Cached server-side because
+// the marine model only updates a few times per day.
+router.get("/currents", withCache('currents'), async (req, res) => {
+  const cfg = getConfig();
   try {
-    if (cache && Date.now() < cache.expiresAt) {
-      res.json(cache.data);
-      return;
-    }
-
-    const results = await Promise.allSettled(POINTS.map(fetchPoint));
+    const results = await Promise.allSettled(cfg.currentPoints.map(fetchPoint));
     const points = results
       .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchPoint>>> => r.status === "fulfilled")
       .map((r) => r.value);
@@ -72,14 +63,13 @@ router.get("/currents", async (req, res) => {
       : null;
 
     const data = { points, avgKt, source: "Open-Meteo Marine model", fetchedAt: Date.now() };
-    cache = { data, expiresAt: Date.now() + CACHE_MS };
+    (res as any).cacheStore(data);
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch ocean currents");
-    res.status(502).json({ error: "Failed to fetch ocean currents", points: [] });
+    res.status(502).json({ error: "upstream_unavailable", source: "currents" });
   }
 });
 
 export default router;
-
 

@@ -1,21 +1,13 @@
+/**
+ * Air Quality Route
+ * Fetches current AQI and pollutant concentrations from Open-Meteo for config-defined locations.
+ */
 import { Router } from "express";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
-
-let cache: { data: unknown; expiresAt: number } | null = null;
-const CACHE_MS = 15 * 60 * 1000;
-
-// Bay Area monitoring points. Open-Meteo Air Quality API is keyless,
-// global, and returns the US AQI plus pollutant concentrations per lat/lng.
-const POINTS = [
-  { name: "Berkeley", lat: 37.880, lng: -122.264 },
-  { name: "Oakland", lat: 37.804, lng: -122.271 },
-  { name: "San Francisco", lat: 37.774, lng: -122.419 },
-  { name: "Richmond", lat: 37.936, lng: -122.347 },
-  { name: "Walnut Creek", lat: 37.906, lng: -122.065 },
-  { name: "San Jose", lat: 37.339, lng: -121.895 },
-  { name: "Marin/Sausalito", lat: 37.859, lng: -122.485 }
-];
 
 interface OMCurrent {
   time: string;
@@ -41,22 +33,18 @@ function dominantPol(c: OMCurrent): string {
   return Object.entries(scaled).sort((a, b) => b[1] - a[1])[0][0];
 }
 
-router.get("/airquality", async (req, res) => {
+// Bay Area monitoring points. Open-Meteo Air Quality API is keyless,
+// global, and returns the US AQI plus pollutant concentrations per lat/lng.
+router.get("/airquality", withCache('airquality'), async (req, res) => {
+  const cfg = getConfig();
   try {
-    if (cache && Date.now() < cache.expiresAt) {
-      res.json(cache.data);
-      return;
-    }
-
-    const lats = POINTS.map((p) => p.lat).join(",");
-    const lngs = POINTS.map((p) => p.lng).join(",");
+    const lats = cfg.airQualityPoints.map((p) => p.lat).join(",");
+    const lngs = cfg.airQualityPoints.map((p) => p.lon).join(",");
     const url =
       `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lats}` +
-      `&longitude=${lngs}&current=us_aqi,pm2_5,pm10,ozone&timezone=America%2FLos_Angeles`;
+      `&longitude=${lngs}&current=us_aqi,pm2_5,pm10,ozone&timezone=${encodeURIComponent(cfg.location.timezone)}`;
 
-    const r = await fetch(url, { signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": "MosswoodCommandCenter/1.0" },
-    });
+    const r = await apiFetch(url);
     if (!r.ok) throw new Error(`Open-Meteo ${r.status}`);
 
     const json = await r.json();
@@ -67,9 +55,9 @@ router.get("/airquality", async (req, res) => {
     const sensors = arr.map((d, i) => {
       const c = d.current;
       return {
-        name: POINTS[i]?.name ?? `Point ${i + 1}`,
-        lat: POINTS[i]?.lat ?? d.latitude,
-        lng: POINTS[i]?.lng ?? d.longitude,
+        name: cfg.airQualityPoints[i]?.name ?? `Point ${i + 1}`,
+        lat: cfg.airQualityPoints[i]?.lat ?? d.latitude,
+        lng: cfg.airQualityPoints[i]?.lon ?? d.longitude,
         aqi: Math.round(c.us_aqi),
         pm25: c.pm2_5,
         pm10: c.pm10,
@@ -80,13 +68,12 @@ router.get("/airquality", async (req, res) => {
     });
 
     const data = { sensors, fetchedAt: Date.now() };
-    cache = { data, expiresAt: Date.now() + CACHE_MS };
+    (res as any).cacheStore(data);
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch air quality");
-    res.status(502).json({ error: "Failed to fetch AQI", sensors: [] });
+    res.status(502).json({ error: "upstream_unavailable", source: "airquality" });
   }
 });
 
 export default router;
-

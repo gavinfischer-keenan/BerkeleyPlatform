@@ -1,21 +1,17 @@
+/**
+ * Buoys Route
+ * Fetches recent NDBC buoy observations from the config-defined buoy list.
+ */
 import { Router } from "express";
+import { getConfig } from '../config.js';
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
 
-// NOAA NDBC buoy stations around the Bay Area
-const BUOYS = [
-  { id: "46026", name: "San Francisco" },
-  { id: "46012", name: "Half Moon Bay" },
-  { id: "46013", name: "Bodega Bay" },
-  { id: "46214", name: "Point Reyes" },
-  { id: "46237", name: "San Francisco Bar" },
-  { id: "FTPC1", name: "Fort Point" },
-];
-
 async function fetchBuoy(id: string): Promise<Record<string, string | number | null>> {
   const url = `https://www.ndbc.noaa.gov/data/realtime2/${id}.txt`;
-  const res = await fetch(url, { headers: { "User-Agent": "MosswoodCommandCenter/1.0" }, signal: AbortSignal.timeout(8000),
-  });
+  const res = await apiFetch(url);
 
   if (!res.ok) throw new Error(`NDBC ${id} responded ${res.status}`);
 
@@ -50,10 +46,11 @@ async function fetchBuoy(id: string): Promise<Record<string, string | number | n
   };
 }
 
-router.get("/buoys", async (req, res) => {
+router.get("/buoys", withCache('buoys'), async (req, res) => {
+  const cfg = getConfig();
   try {
     const results = await Promise.allSettled(
-      BUOYS.map(async (b) => {
+      cfg.buoys.map(async (b) => {
         const data = await fetchBuoy(b.id);
         return { ...data, name: b.name };
       }),
@@ -61,16 +58,17 @@ router.get("/buoys", async (req, res) => {
 
     const buoys = results.map((r, i) => {
       if (r.status === "fulfilled") return r.value;
-      return { id: BUOYS[i].id, name: BUOYS[i].name, error: "unavailable" };
+      return { id: cfg.buoys[i].id, name: cfg.buoys[i].name, error: "unavailable" };
     });
 
-    res.json({ buoys, fetchedAt: Date.now() });
+    const data = { buoys, fetchedAt: Date.now() };
+    (res as any).cacheStore(data);
+    res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch buoys");
-    res.status(502).json({ error: "Failed to fetch buoy data" });
+    res.status(502).json({ error: "upstream_unavailable", source: "buoys" });
   }
 });
 
 export default router;
-
 

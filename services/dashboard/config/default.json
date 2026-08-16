@@ -1,0 +1,236 @@
+{
+  "location": {
+    "name": "Mosswood Command Center",
+    "center": [37.88, -122.26],
+    "timezone": "America/Los_Angeles",
+    "bounds": [[37.25, -123.20], [38.30, -121.70]],
+    "wideBounds": [[37.0, -123.0], [38.5, -121.5]],
+    "quakeFilter": { "minLat": 36.5, "maxLat": 39.0, "minLng": -124.0, "maxLng": -121.0 },
+    "cosLatFactor": 87.5,
+    "nwsGridpoint": "MTR/84,105"
+  },
+
+  "airports": [
+    { "code": "SFO", "coords": [37.621, -122.379], "primary": true },
+    { "code": "OAK", "coords": [37.721, -122.221], "primary": true },
+    { "code": "SJC", "coords": [37.362, -121.929] },
+    { "code": "SQL", "coords": [37.513, -122.250] },
+    { "code": "NUQ", "coords": [37.416, -122.049] },
+    { "code": "CCR", "coords": [37.990, -122.057] }
+  ],
+
+  "surfSpots": [
+    { "name": "Mavericks",   "coords": [37.495, -122.497], "buoyId": "46012", "scale": 1.5, "cssScale": 0.85, "nudge": [0, 65] },
+    { "name": "Ocean Beach",  "coords": [37.769, -122.511], "buoyId": "46026", "scale": 1.2, "cssScale": 0.85, "nudge": [0, 0] },
+    { "name": "Pacifica",     "coords": [37.593, -122.490], "buoyId": "46012", "scale": 1.0, "cssScale": 0.85, "nudge": [0, -65] },
+    { "name": "Bolinas",      "coords": [37.896, -122.622], "buoyId": "46214", "scale": 0.8, "cssScale": 0.85, "nudge": [55, 0] },
+    { "name": "Fort Point",   "coords": [37.835, -122.509], "buoyId": "46237", "scale": 0.5, "cssScale": 0.80, "nudge": [0, -18] },
+    { "name": "Salmon Creek", "coords": [38.314, -123.023], "buoyId": "46013", "scale": 0.6, "cssScale": 0.85, "nudge": [0, 10] },
+    { "name": "Linda Mar",    "coords": [37.658, -122.494], "buoyId": "46012", "scale": 1.0, "cssScale": 0.85 },
+    { "name": "Steamer Lane", "coords": [36.952, -122.026], "buoyId": "46012", "scale": 1.0, "cssScale": 0.85 }
+  ],
+
+  "buoys": [
+    { "id": "46026", "name": "SF Buoy",       "coords": [37.759, -122.833] },
+    { "id": "46012", "name": "Half Moon Bay",  "coords": [37.363, -122.881] },
+    { "id": "46013", "name": "Bodega Bay",     "coords": [38.242, -123.301] },
+    { "id": "46214", "name": "Point Reyes",    "coords": [37.945, -123.470] },
+    { "id": "46237", "name": "SF Bar Pilots",  "coords": [37.786, -122.634] },
+    { "id": "FTPC1", "name": "Fort Point",     "coords": [37.807, -122.465] }
+  ],
+
+  "tideStations": [
+    { "id": "9414290", "name": "San Francisco", "coords": [37.807, -122.465] },
+    { "id": "9414750", "name": "Alameda",       "coords": [37.772, -122.299] },
+    { "id": "9414863", "name": "Richmond",      "coords": [37.928, -122.400] },
+    { "id": "9415020", "name": "Point Reyes",   "coords": [37.996, -122.976] },
+    { "id": "9413450", "name": "Monterey",      "coords": [36.605, -121.888] }
+  ],
+
+  "weatherStations": [
+    { "id": "KOAK", "name": "Oakland Intl",    "coords": [37.721, -122.221] },
+    { "id": "KSFO", "name": "San Francisco",   "coords": [37.619, -122.375] },
+    { "id": "KNUQ", "name": "Moffett Field",   "coords": [37.416, -122.049] },
+    { "id": "KCCR", "name": "Concord",         "coords": [37.990, -122.057] },
+    { "id": "KAPC", "name": "Napa County",     "coords": [38.213, -122.281] },
+    { "id": "KSUU", "name": "Travis AFB",      "coords": [38.263, -121.927] },
+    { "id": "KHWD", "name": "Hayward",         "coords": [37.659, -122.122] }
+  ],
+
+  "airQualityPoints": [
+    { "name": "Berkeley",    "lat": 37.88, "lon": -122.27 },
+    { "name": "Oakland",     "lat": 37.80, "lon": -122.27 },
+    { "name": "SF Downtown", "lat": 37.77, "lon": -122.42 },
+    { "name": "Richmond",    "lat": 37.94, "lon": -122.35 },
+    { "name": "San Jose",    "lat": 37.34, "lon": -121.89 },
+    { "name": "Vallejo",     "lat": 38.10, "lon": -122.26 },
+    { "name": "Concord",     "lat": 37.98, "lon": -122.03 }
+  ],
+
+  "windGrid": [
+    { "lat": 37.60, "lon": -122.50 }, { "lat": 37.60, "lon": -122.20 },
+    { "lat": 37.70, "lon": -122.50 }, { "lat": 37.70, "lon": -122.20 },
+    { "lat": 37.80, "lon": -122.50 }, { "lat": 37.80, "lon": -122.20 },
+    { "lat": 37.90, "lon": -122.50 }, { "lat": 37.90, "lon": -122.20 },
+    { "lat": 38.00, "lon": -122.50 }, { "lat": 38.00, "lon": -122.20 },
+    { "lat": 38.10, "lon": -122.50 }, { "lat": 38.10, "lon": -122.20 }
+  ],
+
+  "currentPoints": [
+    { "name": "Offshore SF",       "lat": 37.70, "lon": -122.70 },
+    { "name": "Golden Gate",       "lat": 37.82, "lon": -122.55 },
+    { "name": "Farallon Channel",  "lat": 37.75, "lon": -123.00 },
+    { "name": "Half Moon Bay",     "lat": 37.50, "lon": -122.60 },
+    { "name": "Point Reyes",       "lat": 38.00, "lon": -123.10 },
+    { "name": "Bodega Bay",        "lat": 38.30, "lon": -123.20 }
+  ],
+
+  "alerts": {
+    "area": "CA",
+    "zones": ["CAZ508"]
+  },
+
+  "aircraft": {
+    "center": [37.88, -122.26],
+    "radiusNm": 150,
+    "localIata": ["SFO", "OAK", "SJC", "SMF", "STS", "CCR", "SQL", "PAO", "HWD", "LVK", "NUQ"]
+  },
+
+  "coastline": {
+    "polygons": [
+      {
+        "name": "SF Peninsula + Marin",
+        "coords": [
+          [38.10,-122.97],[38.00,-122.83],[37.92,-122.70],[37.87,-122.60],
+          [37.83,-122.51],[37.81,-122.49],[37.80,-122.47],[37.79,-122.51],
+          [37.77,-122.51],[37.75,-122.51],[37.73,-122.50],[37.71,-122.50],
+          [37.65,-122.49],[37.60,-122.49],[37.55,-122.48],[37.50,-122.45],
+          [37.45,-122.42],[37.40,-122.40],[37.40,-122.30],[37.45,-122.20],
+          [37.50,-122.15],[37.55,-122.10],[37.60,-122.05],[37.65,-122.10],
+          [37.70,-122.15],[37.75,-122.20],[37.80,-122.25],[37.85,-122.30],
+          [37.87,-122.35],[37.82,-122.38],[37.80,-122.40],[37.82,-122.42],
+          [37.85,-122.48],[37.90,-122.50],[37.95,-122.55],[38.00,-122.60],
+          [38.05,-122.70],[38.10,-122.80]
+        ]
+      },
+      {
+        "name": "East Bay",
+        "coords": [
+          [37.88,-122.35],[37.85,-122.30],[37.80,-122.28],[37.75,-122.25],
+          [37.70,-122.20],[37.65,-122.15],[37.60,-122.12],[37.55,-122.10],
+          [37.50,-122.08],[37.50,-122.15],[37.55,-122.20],[37.60,-122.25],
+          [37.65,-122.28],[37.70,-122.30],[37.75,-122.32],[37.80,-122.33],
+          [37.85,-122.34]
+        ]
+      }
+    ]
+  },
+
+  "hazards": {
+    "faultZones": [
+      { "name": "Hayward",      "distance": "0.5 mi", "direction": "E" },
+      { "name": "San Andreas",  "distance": "15 mi",  "direction": "W" },
+      { "name": "Calaveras",    "distance": "12 mi",  "direction": "E" }
+    ],
+    "airmetPosition": [37.3, -122.8],
+    "faultBoxPosition": [37.65, -122.10]
+  },
+
+  "bathymetry": {
+    "depthProfile": "continental_shelf",
+    "seeds": {
+      "general": "0xABCDEF42",
+      "dense": "0xC0FFEE99",
+      "superDense": "0xBEEFCAFE",
+      "sparse": "0xDEADBEEF"
+    },
+    "denseGrid":      { "latRange": [37.60, 37.90], "lngRange": [-122.70, -122.35], "latStep": 0.022, "lngStep": 0.028 },
+    "superDenseGrid": { "latRange": [37.78, 37.86], "lngRange": [-122.55, -122.38], "latStep": 0.005, "lngStep": 0.006 },
+    "sparseGrid":     { "latRange": [37.25, 38.30], "lngRange": [-123.20, -121.70], "latStep": 0.15,  "lngStep": 0.15 }
+  },
+
+  "ports": {
+    "primary":   { "name": "Berkeley",      "coords": [37.88, -122.26], "radiusKm": 2.5 },
+    "secondary": { "name": "Oakland Port",  "coords": [37.80, -122.28], "radiusKm": 4.0 },
+    "tertiary":  { "name": "SF Waterfront", "coords": [37.81, -122.41], "radiusKm": 2.5 },
+    "estuary":   { "latRange": [37.78, 37.81], "lngRange": [-122.30, -122.25] }
+  },
+
+  "satellite": {
+    "goesUrl": "https://cdn.star.nesdis.noaa.gov/GOES18/ABI/SECTOR/psw/GEOCOLOR/GOES18-PSW-GEOCOLOR-600x600.gif",
+    "radarGifUrl": "https://radar.weather.gov/ridge/standard/PACIFICSOUTHWEST_loop.gif"
+  },
+
+  "externalUrls": {
+    "rainviewer": "https://api.rainviewer.com/public/weather-maps.json",
+    "openMeteoMarine": "https://marine-api.open-meteo.com/v1/marine",
+    "nwsForecast": "https://api.weather.gov/gridpoints/MTR/84,105/forecast",
+    "baseTileOcean": "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
+    "baseTileLabels": "https://{s}.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}{r}.png",
+    "gebcoWms": "https://wms.gebco.net/mapserv?"
+  },
+
+  "server": {
+    "port": 3000,
+    "userAgent": "MosswoodCommandCenter/1.0",
+    "fetchTimeoutMs": 8000,
+    "cacheDurations": {
+      "weather":      600000,
+      "aircraft":      60000,
+      "buoys":        300000,
+      "alerts":       300000,
+      "tide":        1800000,
+      "wind":        1800000,
+      "currents":    1800000,
+      "airquality":   900000,
+      "stations":     600000,
+      "turbulence":   600000,
+      "earthquakes":  300000,
+      "airport":      120000
+    }
+  },
+
+  "ui": {
+    "refreshIntervals": {
+      "weather":    300000,
+      "aircraft":    10000,
+      "buoys":      300000,
+      "radar":      300000,
+      "surf":      3600000,
+      "forecast":  3600000,
+      "stations":   300000,
+      "quakes":     300000,
+      "alerts":     300000,
+      "turbulence": 300000,
+      "airquality": 300000,
+      "currents":   300000,
+      "tide":       300000,
+      "airport":    120000,
+      "wind":       300000
+    },
+    "stateRotation": {
+      "defaultDurationMs": 17250,
+      "holdExtraMs": 3300
+    },
+    "map": {
+      "minZoom": 0,
+      "maxZoom": 14,
+      "radarMaxNativeZoom": 8,
+      "breadcrumbLimit": 7,
+      "maxAircraftSpeedKt": 600
+    },
+    "colors": {
+      "hazardRed":     "#ee5253",
+      "hazardPink":    "#e84393",
+      "hazardOrange":  "#ff9f43",
+      "hazardGreen":   "#1dd1a1",
+      "hazardLightRed":"#ff7675",
+      "hazardPurple":  "#a29bfe",
+      "accentCyan":    "#0abde3",
+      "accentGold":    "#feca57",
+      "accentBlue":    "#4facfe",
+      "textMuted":     "#a4b0be",
+      "textLight":     "#dfe6e9"
+    }
+  }
+}

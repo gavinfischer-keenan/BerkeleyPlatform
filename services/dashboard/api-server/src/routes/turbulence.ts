@@ -1,21 +1,19 @@
+/**
+ * Turbulence Route
+ * Fetches AIRMETs and SIGMETs for turbulence from Aviation Weather Center.
+ */
 import { Router } from "express";
+import { withCache } from '../lib/cache.js';
+import { apiFetch } from '../lib/fetcher.js';
 
 const router = Router();
 
-let cache: { data: unknown; expiresAt: number } | null = null;
-const CACHE_MS = 10 * 60 * 1000;
-
-router.get("/turbulence", async (req, res) => {
+router.get("/turbulence", withCache('turbulence'), async (req, res) => {
   try {
-    if (cache && Date.now() < cache.expiresAt) {
-      res.json(cache.data);
-      return;
-    }
-
     // Fetch FAA/AWC Aviation Weather polygons for SIGMETs and AIRMETs
     const [rAirmet, rSigmet] = await Promise.all([
-      fetch("https://aviationweather.gov/api/data/airmet?format=geojson", { signal: AbortSignal.timeout(8000) }).catch(() => null),
-      fetch("https://aviationweather.gov/api/data/sigmet?format=geojson", { signal: AbortSignal.timeout(8000) }).catch(() => null)
+      apiFetch("https://aviationweather.gov/api/data/airmet?format=geojson").catch(() => null),
+      apiFetch("https://aviationweather.gov/api/data/sigmet?format=geojson").catch(() => null)
     ]);
 
     const turbulence = [];
@@ -41,13 +39,12 @@ router.get("/turbulence", async (req, res) => {
     await processFeatures(rSigmet);
 
     const data = { turbulence, fetchedAt: Date.now() };
-    cache = { data, expiresAt: Date.now() + CACHE_MS };
+    (res as any).cacheStore(data);
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch turbulence");
-    res.status(502).json({ error: "Failed to fetch turbulence", turbulence: [] });
+    res.status(502).json({ error: "upstream_unavailable", source: "turbulence" });
   }
 });
 
 export default router;
-

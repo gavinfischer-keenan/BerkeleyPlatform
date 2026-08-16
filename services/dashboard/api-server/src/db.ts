@@ -113,3 +113,7 @@ export function setAircraftImage(icao24: string, url: string) {
   }
   saveDatabase();
 }
+
+export function getAllVessels(): DBVessel[] {
+  return Object.values(db.vessels);
+}

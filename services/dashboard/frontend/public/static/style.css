@@ -1,14 +1,64 @@
+/* ==========================================================================
+   Design Tokens — CSS Custom Properties
+   All colors, backgrounds, and key dimensions centralized here.
+   To retheme the dashboard, modify only this block.
+   ========================================================================== */
+:root {
+  /* Background tones */
+  --bg-body:       #000;
+  --bg-viewport:   #070913;
+  --bg-panel:      rgba(10, 14, 26, 0.95);
+  --bg-panel-light:rgba(10, 20, 30, 0.8);
+  --bg-glass:      rgba(255, 255, 255, 0.05);
+
+  /* Text colors */
+  --text-primary:  #e5e5e5;
+  --text-white:    #ffffff;
+  --text-muted:    #a4b0be;
+  --text-dim:      #b2bec3;
+  --text-subtle:   #8395a7;
+  --text-light:    #dfe6e9;
+  --text-soft:     #d7e0ea;
+  --text-blue:     #dfe6ff;
+  --text-warm:     #e8eef7;
+  --text-inactive: #636e72;
+
+  /* Accent colors */
+  --accent-cyan:   #0abde3;
+  --accent-cyan-bright: #2bd9ff;
+  --accent-cyan-light:  #48dbfb;
+  --accent-cyan-pale:   #00d2d3;
+  --accent-blue:   #0984e3;
+  --accent-blue-light:  #74b9ff;
+  --accent-blue-mid:    #54a0ff;
+  --accent-blue-feature:#4facfe;
+  --accent-gold:   #feca57;
+  --accent-gold-bright: #ffd32a;
+  --accent-gold-warm:   #fdcb6e;
+  --accent-green:  #1dd1a1;
+  --accent-green-light: #81ecec;
+  --accent-teal:   #00d2d3;
+
+  /* Hazard / alert colors */
+  --hazard-red:    #ee5253;
+  --hazard-red-light:   #ff6b6b;
+  --hazard-red-bright:  #e74c3c;
+  --hazard-orange: #ff9f43;
+  --hazard-pink:   #e84393;
+  --hazard-purple: #a29bfe;
+}
+
 body, html { 
     margin: 0; 
     padding: 0; 
-    background: #000; 
+    background: var(--bg-body); 
     height: 100vh; 
     overflow: hidden;
     display: flex; 
     justify-content: center; 
     align-items: center;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
-    color: #e5e5e5; 
+    color: var(--text-primary); 
 }
 
 /* Hard-Locked Fixed Aspect Ratio Viewport Frame */
@@ -19,7 +69,7 @@ body, html {
     border: 12px solid #000; 
     box-sizing: border-box; 
     overflow: hidden; 
-    background: #070913;
+    background: var(--bg-viewport);
     transform-origin: center center;
     flex-shrink: 0;
 }
