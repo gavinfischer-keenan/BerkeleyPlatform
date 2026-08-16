@@ -137,13 +137,20 @@ Express.js TypeScript API server providing 14 routes re-centered to Bay Area coo
 - `upload.ts` — Data ingest endpoint
 
 ### Frontend (`services/dashboard/frontend/`)
-Leaflet.js SPA with a 6-state rotating dashboard:
-- `script.js` — Core map logic, rotating dashboard states, layer management.
-- `style.css` — Styling and animations.
+Leaflet.js SPA with a 6-state rotating dashboard, split into ES modules:
+- `state.js` — Shared mutable state (map, layers, liveData, surfSpots)
+- `map-setup.js` — Leaflet initialization, panes, base tiles
+- `geo.js` — Coastline polygons, bathymetry grids, distance math
+- `render.js` — Marker/icon builders, DOM helpers, declutter engine
+- `fetch.js` — All 14 API fetch functions (weather, buoys, aircraft, etc.)
+- `ui-states.js` — Dashboard state definitions (Meteorological, Surf, Traffic, Hazard, Satellite, Radar)
+- `engine.js` — State machine, pagination, view transitions
+- `main.js` — Entry point: boot sequence, interval scheduling, FPS monitor
+- `style.css` — Styling with CSS custom properties (:root design tokens)
 
 **Ship Tracking Evolution:**
-Currently relies on AISStream.io WebSocket (paid API key).
-*Future:* Will transition to local AIS SDR on Pi 5 → MQTT `home/sensors/ais/{mmsi}` → dashboard consumes via MQTT cache instead of WebSocket.
+Currently reads from local vessel observation DB via `/api/ships`.
+*Future:* Local AIS SDR on Pi 5 → MQTT `home/sensors/ais/{mmsi}` → populates vessel DB.
 
 ---
 
@@ -379,7 +386,14 @@ services/dashboard/
 │   └── public/
 │       ├── admin.html         ← Vessel/aircraft image uploader
 │       └── static/
-│           ├── script.js      ← Leaflet.js dashboard (cleaned up)
+│           ├── state.js       ← Shared mutable state (map, layers, liveData)
+│           ├── map-setup.js   ← Leaflet init, panes, base tiles
+│           ├── geo.js         ← Coastline, bathymetry, distance math
+│           ├── render.js      ← Marker builders, DOM helpers, declutter
+│           ├── fetch.js       ← All 14 API fetch functions
+│           ├── ui-states.js   ← 6 dashboard state definitions
+│           ├── engine.js      ← State machine, pagination, transitions
+│           ├── main.js        ← Entry point (boot, intervals, FPS)
 │           └── style.css      ← With CSS custom properties (:root tokens)
 ```
 
@@ -465,9 +479,8 @@ To retheme the dashboard, modify only the `:root` block.
 - Integrate Google Coral USB TPU on Day 2
 
 **To-Do (Software):**
-- Split script.js into ES modules (config.js, map.js, geo.js, fetch.js, render.js, ui-states.js, engine.js, main.js)
 - Replace remaining hardcoded CSS hex values with var() references
-- Frontend config.js bootstrap (fetch /api/config on load)
+- Frontend config.js bootstrap (fetch /api/config on load, populate CONFIG global)
 
 ---
 
@@ -483,12 +496,13 @@ To retheme the dashboard, modify only the `:root` block.
 - **mock.js Deletion:** Deleted the 110KB mock.js (90%+ duplication of script.js). If demo mode is needed, the real script.js handles API-offline graceful degradation natively.
 - **CSS Design Tokens:** Extracted all hardcoded colors to CSS custom properties in `:root` to enable easy theming and consistent palette management.
 - **Unused Dependencies:** Removed `better-sqlite3`, `drizzle-orm`, and `cookie-parser` from package.json — the app uses a flat JSON file for persistence, not SQLite.
+- **Frontend Module Split (Phase 4):** Split the 2110-line script.js into 8 ES modules. Design rationale: `state.js` is the leaf dependency (shared mutable state), `map-setup.js` initializes Leaflet and writes to state, `geo.js`/`render.js`/`fetch.js` are the workhorses, `ui-states.js` defines views, `engine.js` drives transitions, and `main.js` is the entry point. Circular dependencies were resolved by adding `currentView` to `state.js` instead of having render.js import from engine.js.
 
 ---
 
 ## Deferred Items
 
-- **Frontend Module Split:** script.js should be split into ~8 ES modules using `type="module"`. Deferred to next session — the config-driven cleanup was prioritized.
+- **Frontend Module Split:** Completed — the monolithic 2110-line script.js was split into 8 focused ES modules (state.js, map-setup.js, geo.js, render.js, fetch.js, ui-states.js, engine.js, main.js). Index.html updated to `<script type="module" src="/static/main.js">`. All 134 exports resolve correctly across the module graph. 35 automated tests verify the structure.
 - **VisionAgent & CrossModal AI:** Deferred until Node 02 is fully operational and base telemetry is stable. Rationale: Need stable ground-truth data (audio/video) before correlating.
 - **Local Ship Tracking via SDR:** Deferred until Pi 5 SDR setup is complete. The `/api/ships` endpoint reads from the vessel DB which will be populated by MQTT messages from the SDR.
 - **Touch Command Panel:** Deferred to future phase. Rationale: Prioritizing automated alerts (Alexa TTS, Display) over manual control panels initially.
