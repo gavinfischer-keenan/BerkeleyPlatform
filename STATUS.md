@@ -22,12 +22,29 @@ Five things found during that build that **change what you do on Node 01**:
    Every reference in this repo was wrong, including the ESPHome netmasks
    (`255.255.252.0`, not `255.255.255.0`). **Fixed in this commit.** Reflash any ESP32
    already programmed from the old files.
-3. **`BerkeleyDashboard` cannot authenticate to MQTT.** Its `Settings` has no username
-   or password field, but our broker config sets `allow_anonymous false`. Decide before
-   Node 01's broker goes up: add credential support to the dashboard, or carve out an
-   authenticated-listener exception. **Not yet fixed — needs a code change.**
-4. **These LAN addresses are taken by Node 02:** `.175` (host), `.176`–`.180`, `.183`.
-   Pick Node 01 addresses outside that range.
+3. **`BerkeleyDashboard` cannot authenticate to MQTT — now confirmed live, not
+   predicted.** Its `Settings` has no username or password field, and Node 01's broker
+   answers `Connection Refused: not authorised` to an anonymous client (tested from
+   Node 02 on 2026-08-16 against `192.168.4.181:1883`). **The dashboard cannot receive
+   any house data until this is closed.** Two ways out:
+   - *Code:* add `mqtt_username` / `mqtt_password` to `dashboard/config.py` and pass
+     them to the paho client. Correct fix.
+   - *Infrastructure, no code change:* configure Node 02's broker as a **bridge** that
+     authenticates to Node 01 and mirrors `home/#` locally. The dashboard keeps
+     talking to its local anonymous broker and sees real data. Needs an MQTT account
+     on Node 01.
+4. **Address map** — `.175`–`.183` is dense, check before assigning:
+
+   | Address | Host |
+   | --- | --- |
+   | `192.168.4.175` | **Node 02** — Proxmox host |
+   | `.176` `.177` | tto-db, tto-app |
+   | `.178` `.179` `.180` | ingress (Caddy), ollama, berkeley-dash |
+   | **`192.168.4.181`** | **Node 01** — Dell OptiPlex, Proxmox host |
+   | `.183` | mosquitto (Node 02 local broker) |
+
+   `.182` is the only gap left in that run. Node 01's own containers should go
+   somewhere clear — `.190`–`.199` is empty.
 5. **`BerkeleyDashboard` crash-loops without a broker.** `mqtt_bridge.start()` calls
    `paho.connect()` synchronously and dies on `gaierror`. Any agent you deploy on
    Node 01 before the broker exists will do the same.

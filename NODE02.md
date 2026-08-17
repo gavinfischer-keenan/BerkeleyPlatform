@@ -142,7 +142,8 @@ configured** — everything is in one house.
 
 ## 9. Open items
 
-- **`BerkeleyDashboard` cannot authenticate to MQTT.** Its `Settings` has no
+- **`BerkeleyDashboard` cannot authenticate to MQTT — CONFIRMED live against Node 01
+  at 192.168.4.181, which answers `Connection Refused: not authorised`.** Its `Settings` has no
   username/password field, but the platform's broker sets `allow_anonymous false`.
   They cannot talk as written. Node 02's broker allows anonymous *only* because the
   mesh has no uplink. **Needs a code change before Node 01's broker goes up.**
