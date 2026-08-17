@@ -28,7 +28,7 @@ substitutions:
   circuit_id: "hvac"                    # CHANGE per device
   circuit_name: "HVAC / Heat Pump"      # CHANGE per device
   mqtt_broker: !secret mqtt_broker           # Node 01 IP
-  static_ip: "192.168.1.80"            # CHANGE per device (use 80-85 for power monitors)
+  static_ip: "192.168.4.80"            # CHANGE per device (use 80-85 for power monitors)
   # Current transformer calibration
   # SCT-013-030 (30A/1V): calibration = 30.0
   # SCT-013-000 (100A/50mA): calibration ≈ 111.1 (with 33Ω burden)
@@ -48,8 +48,8 @@ wifi:
   power_save_mode: NONE
   manual_ip:
     static_ip: ${static_ip}
-    gateway: 192.168.1.1
-    subnet: 255.255.255.0
+    gateway: 192.168.4.1
+    subnet: 255.255.252.0
 
 mqtt:
   broker: ${mqtt_broker}

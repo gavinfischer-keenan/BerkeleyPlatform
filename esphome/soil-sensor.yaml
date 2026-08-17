@@ -25,7 +25,7 @@ substitutions:
   zone_id: "soil-zone-1"            # CHANGE per device
   rachio_zone: "1"                  # CHANGE per device
   mqtt_broker: !secret mqtt_broker
-  static_ip: "192.168.1.60"         # CHANGE per device (use 60-69 for soil sensors)
+  static_ip: "192.168.4.60"         # CHANGE per device (use 60-69 for soil sensors)
 
 esphome:
   name: ${device_name}
@@ -37,8 +37,8 @@ wifi:
   password: !secret wifi_password
   manual_ip:
     static_ip: ${static_ip}
-    gateway: 192.168.1.1
-    subnet: 255.255.255.0
+    gateway: 192.168.4.1
+    subnet: 255.255.252.0
 
 mqtt:
   broker: ${mqtt_broker}

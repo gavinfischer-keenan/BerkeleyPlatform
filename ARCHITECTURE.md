@@ -62,20 +62,32 @@ Message sub-types:
 - **OS:** Proxmox VE 8.x (bare-metal)
 
 ### Node 02 — Compute Node (Gigabyte GFCANADA)
-**Role:** The "Brain in a Jar." Wakes on API requests from Node 01 (or when the property is vacant) to run deep-dive data correlation, biological behavioural analysis, and large language models.
-**Timeline:** Comes online AFTER Node 01 is stable.
+**Role:** The "Brain in a Jar" — *and*, since 2026-08-16, the TTOindustryNeed server.
+That second role was assigned by a separate project ([ttoneedmarket](https://github.com/gavinfischer-keenan/ttoneedmarket))
+whose author did not know this platform existed. Node 02 is now provisioned
+**TTO-primary**, with the Berkeley compute roles alongside. Full as-built record:
+**[NODE02.md](NODE02.md)** — read it before changing anything on that box.
+
+**Status:** ✅ **BUILT AND RUNNING** at `192.168.4.175`, Proxmox VE 9.2.10.
+**Timeline:** Came online *before* Node 01, not after — TTO needed it. Nothing on
+Node 02 blocks on Node 01 existing.
 
 - **Motherboard:** Gigabyte B650 GAMING X AX
-- **CPU:** AMD Ryzen 7 7800X3D (8C/16T, 3D V-Cache)
-- **RAM:** 64GB DDR5 (2×32GB)
-- **GPU:** NVIDIA RTX 4080 SUPER (16GB VRAM)
-- **iGPU:** AMD Radeon (for Proxmox console)
-- **Storage:** 3× 2TB NVMe = 6TB total:
-  - Kingston SNV2S2000G (Proxmox boot)
-  - Samsung 990 Pro 2TB PCIe 4.0 (AI model buffer)
-  - Samsung 9100 Pro 2TB PCIe 5.0 (batch data)
-- **Network:** Realtek 2.5GbE (native on board)
+- **CPU:** AMD Ryzen 7 7800X3D (8C/16T, 3D V-Cache) — as specified
+- **RAM:** ⚠️ **32GB DDR5-6000 (2×16GB), not 64GB.** The 2×32GB kit was ordered but
+  never installed. Two slots free; board maximum is 128GB.
+- **GPU:** NVIDIA RTX 4080 SUPER (16GB VRAM) — as specified, driver 595.80
+- **iGPU:** AMD Radeon (Proxmox console only, never passed through)
+- **Storage:** ⚠️ **1× 2TB NVMe, not 3× 2TB.** Only the Samsung 990 Pro is fitted, and
+  it is the *boot* disk — Proxmox, 96GB root, and a 1.67TB LVM-thin pool. The
+  Kingston SNV2S2000G and Samsung 9100 Pro are **not installed**.
+  - Plus a Seagate 7.3TB USB HDD, reformatted ext4, now the backup target (`bulk`).
+- **Network:** Realtek RTL8125 2.5GbE — ⚠️ **negotiating 1Gb**; check switch/cable
+- **OS:** ⚠️ Proxmox VE **9.2.10** (Debian 13 trixie), not 8.x
 - **UPS:** Shared CyberPower CP1500PFCLCD
+
+> **Any plan quoting 64GB RAM, three NVMe drives, or ZFS pools named `fast`/`bulk`
+> is describing hardware that is not in this machine.**
 - **OS:** Proxmox VE 8.x (bare-metal, after Windows 11 data migration)
 
 ### Node 03 / Edge Swarm
@@ -102,16 +114,43 @@ Message sub-types:
 | overhead | - | ~6GB | Proxmox + ZFS ARC |
 | headroom | - | ~41GB | Future services |
 
-### Node 02 Services
+### Node 02 Services — as built 2026-08-16
 
-| Container/VM | Type | Resources | Storage | Purpose |
-|-------------|------|-----------|---------|--------|
-| `ollama` | LXC/VM | 4 vCPU, 16GB, GPU passthrough | Samsung 990 Pro | LLM inference (Llama-3, LLaVA) |
-| `berkeley-dashboard` | Docker | 2 vCPU, 4GB | Kingston boot | Dashboard + API (Ported) |
-| `correlation-agents` | Docker | 4 vCPU, 8GB | Samsung 9100 Pro | Data correlation |
-| `ai-garden` | Docker | 2 vCPU, 2GB | Kingston boot | Irrigation AI |
-| overhead | - | ~8GB | - | Proxmox + GPU driver |
-| headroom | - | ~26GB | - | Future |
+All LXC on `local-lvm`. Every container is dual-homed: `vmbr0` on the LAN and
+`vmbr1`, an isolated service mesh (`10.20.0.0/24`) with **no uplink**.
+
+| VMID | Container | vCPU | RAM | LAN | Mesh | Purpose |
+|------|-----------|------|-----|-----|------|---------|
+| 100 | `tto-db` | 4 | 8GB | .176 | 10.20.0.10 | PostgreSQL 17 + pgvector 0.8 — **TTO** |
+| 101 | `tto-app` | 6 | 6GB | .177 | 10.20.0.11 | TTO app, uvicorn :8099 — **TTO** |
+| 102 | `ingress` | 1 | 512MB | .178 | 10.20.0.12 | Caddy — LAN front door |
+| 103 | `mosquitto` | 1 | 512MB | .183 | 10.20.0.40 | Local MQTT broker (see note) |
+| 110 | `ollama` | 6 | 8GB | .179 | 10.20.0.20 | LLM inference, shared GPU |
+| 120 | `berkeley-dash` | 2 | 2GB | .180 | 10.20.0.30 | BerkeleyDashboard :8090 |
+
+Ceilings total 25GB against 30GB usable — LXC memory is a ceiling, not a
+reservation. Ollama was cut from 16GB to 8GB: models are resident in the 16GB of
+VRAM, not in host RAM.
+
+**Not built.** `correlation-agents` and `ai-garden` have no code — the `CrossModalAI`
+and `BerkeleyGarden` repositories do not exist.
+
+**GPU sharing, not VFIO.** The NVIDIA driver lives on the host and `/dev/nvidia*` is
+bind-mounted into containers, so several tenants can share the card. VFIO would give
+one guest exclusive ownership, which no longer works now that TTO also wants the GPU.
+Host and container userspace driver versions must match (both 595.80).
+
+**Why there is a broker here.** Node 01 owns the platform broker. But
+`BerkeleyDashboard` calls `paho.connect()` synchronously in `mqtt_bridge.start()` and
+**dies on startup** if the broker is unreachable — it does not retry. A local broker
+on the mesh is what lets Node 02 run standalone. When Node 01 is up, either bridge the
+two or repoint the dashboard.
+
+> ⚠️ **Blocks Node 01:** `BerkeleyDashboard`'s `Settings` class has no MQTT username or
+> password field, but `services/mosquitto/mosquitto.conf` sets `allow_anonymous false`.
+> **As written, the dashboard cannot authenticate to the platform broker.** Node 02's
+> broker permits anonymous access only because its listener is bound to a bridge with
+> no uplink.
 
 ---
 
@@ -287,7 +326,7 @@ BerkeleyDashboard (Node 02, port 8090 — Express/Leaflet)
   [Router / Firewall]
      │  ├── Port 80/443 → nginx public vhost (Node 01) → /public/* only
      │
-  ┌──┴──────── Local LAN (192.168.1.x) [2.5GbE Switch + UPS] ──────────┐
+  ┌──┴──────── Local LAN (192.168.4.x) [2.5GbE Switch + UPS] ──────────┐
   │                                                                     │
   │  Node 01 — Dell OptiPlex (Control Plane) [2.5GbE]                  │
   │  ├── Proxmox VE (hypervisor)                                        │

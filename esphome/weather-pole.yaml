@@ -125,9 +125,9 @@ wifi:
   fast_connect: true
   power_save_mode: NONE
   manual_ip:
-    static_ip: 192.168.1.50
-    gateway: 192.168.1.1
-    subnet: 255.255.255.0
+    static_ip: 192.168.4.50
+    gateway: 192.168.4.1
+    subnet: 255.255.252.0
 
 mqtt:
   broker: ${mqtt_broker}

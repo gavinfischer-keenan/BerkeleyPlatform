@@ -8,7 +8,7 @@ engines observe, predict, and learn — feeding their intelligence to multiple c
 | Node | Hardware | Role | Key Services |
 |------|----------|------|-------------|
 | **Node 01 — Control Plane** | Dell OptiPlex SFF (i7-8700) | Stable, un-crashable heart. All hardware interfaces, MQTT, life-safety, voice, vision. | Home Assistant OS, Mosquitto, InfluxDB, Frigate NVR (+ Coral TPU), Wyoming Voice Pipeline |
-| **Node 02 — Compute Node** | Gigabyte GFCANADA (Ryzen 7 7800X3D + RTX 4080 SUPER) | "Brain in a Jar." Wakes on API request or vacancy for deep AI work. | Ollama (Llama-3, LLaVA), Data Correlation Agents, Mosswood Intelligence Briefing |
+| **Node 02 — Compute Node** ✅ *built* | Gigabyte GFCANADA (Ryzen 7 7800X3D + RTX 4080 SUPER, **32GB**, 1× 2TB NVMe) at `192.168.4.175` | "Brain in a Jar" **and** the TTOindustryNeed server. Built 2026-08-16, ahead of Node 01. | Ollama (llama3.1, mxbai-embed-large), BerkeleyDashboard, PostgreSQL+pgvector, Caddy, Mosquitto — see **[NODE02.md](NODE02.md)** |
 | **Edge Swarm (Node 03)** | Raspberry Pi 5, ESP32s, HLK-LD2410 × 5 | Field sensors and local inference. | BirdNET/BatNET, ADS-B/AIS SDR, mmWave occupancy, Weather Pole |
 
 ## Repositories
