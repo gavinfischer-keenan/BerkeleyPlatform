@@ -114,8 +114,8 @@ not the schema:
 3. **`test_provisional_embeddings_land_in_their_own_partition` inserts `'[1,2,3]'`**
    into `halfvec(1024)`. The test needs a 1024-wide vector.
 
-None of these were fixed — they are code changes to a repo whose standing rule is
-that tests pass before check-in, and that is a commit for their author to own.
+**All three are fixed** (`ttoneedmarket` commit 2799f68) and the suite is green:
+**223 passed**, live-schema tests included. Recorded as ADR-0010.
 
 ## 7. The merge point
 
@@ -129,29 +129,43 @@ afterwards; `TTONEED_EMBEDDING_MODEL` is now set to `mxbai-embed-large`.
 
 ## 8. Backups
 
-`pg_dump` nightly at 02:30 in CT 100, `-Fc`, 14 days retained, verified by a live run.
+The Seagate 7.3 TB USB drive was reformatted ext4 and is the backup target, mounted
+`/mnt/bulk` and registered with Proxmox as storage `bulk`.
 
-**Everything is on one disk.** vzdump is not yet scheduled because the only sensible
-target is the 7.3 TB USB drive, which is exfat and needs reformatting — a
-destructive act awaiting a decision. Offsite is not configured.
+| What | When | Retention | Verified |
+| --- | --- | --- | --- |
+| `vzdump` — every container, snapshot mode, zstd | nightly 03:00 | 7 daily, 4 weekly | yes — 9.4 GB first run, all 6 CTs |
+| `pg_dump -Fc` — TTO database | nightly 02:30 | 14 days | yes — writes to `bulk` |
+
+Both land on a *different physical disk* from the data. **Offsite is still not
+configured** — everything is in one house.
 
 ## 9. Open items
 
-- **Reformat the USB drive** to ext4 and schedule vzdump. Blocked on approval.
-- **Fix the three test defects** in §6.
-- **Berkeley's `mosquitto.conf` will not start.** `keepalive_interval` is a
-  bridge-only directive and is set at global scope. Node 01 will hit this too.
 - **`BerkeleyDashboard` cannot authenticate to MQTT.** Its `Settings` has no
   username/password field, but the platform's broker sets `allow_anonymous false`.
   They cannot talk as written. Node 02's broker allows anonymous *only* because the
-  mesh has no uplink.
+  mesh has no uplink. **Needs a code change before Node 01's broker goes up.**
+- **`BerkeleyDashboard` crash-loops without a broker** rather than retrying
+  (`mqtt_bridge.start()` → `paho.connect()` → `gaierror`). Also a code change.
+- **No offsite backup.** One machine, one house.
 - **No local DNS.** `*.mosswood.lan` does not resolve; Caddy's hostname routes are
   configured but reachable only by IP or `Host:` header until DNS exists.
-- **Berkeley docs still say `192.168.1.x`.** `.env.example` would hand agents a
-  broker address that does not exist.
-- **Four ADRs still open** (0003, 0004, 0005, 0006). They change stored data, so
+- **Four TTO ADRs still open** (0003, 0004, 0005, 0006). They change stored data, so
   they are cheapest to resolve now, before the corpus exists.
-- **NIC negotiated at 1 Gb**, not 2.5.
+- **NIC negotiated at 1 Gb**, not 2.5 — switch or cable.
+- **Missing hardware still worth fitting:** 2×32 GB DDR5, and the 9100 Pro / Kingston
+  NVMe drives. Container ceilings are 25 GB against 30 GB usable.
+
+### Closed during this build
+
+- ~~Berkeley's `mosquitto.conf` will not start~~ — `keepalive_interval` removed,
+  validated against mosquitto 2.0.21. `BerkeleyPlatform` commit 4fd82ce.
+- ~~Berkeley docs say `192.168.1.x`~~ — corrected to `192.168.4.0/22` across
+  `.env.example`, `ARCHITECTURE.md`, `nginx/`, and all five ESPHome templates
+  (whose netmask also became `255.255.252.0`). Same commit.
+- ~~Three TTO test defects~~ — fixed, suite green at 223. `ttoneedmarket` 2799f68.
+- ~~vzdump unscheduled~~ — see §8.
 
 ## 10. Access
 
