@@ -22,17 +22,23 @@ Five things found during that build that **change what you do on Node 01**:
    Every reference in this repo was wrong, including the ESPHome netmasks
    (`255.255.252.0`, not `255.255.255.0`). **Fixed in this commit.** Reflash any ESP32
    already programmed from the old files.
-3. **`BerkeleyDashboard` cannot authenticate to MQTT — now confirmed live, not
-   predicted.** Its `Settings` has no username or password field, and Node 01's broker
-   answers `Connection Refused: not authorised` to an anonymous client (tested from
-   Node 02 on 2026-08-16 against `192.168.4.181:1883`). **The dashboard cannot receive
-   any house data until this is closed.** Two ways out:
-   - *Code:* add `mqtt_username` / `mqtt_password` to `dashboard/config.py` and pass
-     them to the paho client. Correct fix.
-   - *Infrastructure, no code change:* configure Node 02's broker as a **bridge** that
-     authenticates to Node 01 and mirrors `home/#` locally. The dashboard keeps
-     talking to its local anonymous broker and sees real data. Needs an MQTT account
-     on Node 01.
+3. **`BerkeleyDashboard` cannot authenticate to MQTT — worked around, not fixed.**
+   Its `Settings` has no username or password field, and Node 01's broker correctly
+   answers `Connection Refused: not authorised` to an anonymous client. Confirmed
+   live against `192.168.4.181:1883`.
+
+   **Current state:** Node 02's Mosquitto is configured as an authenticated **bridge**
+   to Node 01 (`/etc/mosquitto/conf.d/bridge-node01.conf` in CT 103, mode 600, using
+   the `node02` account). It mirrors `home/#` down and pushes `node02/#` up. The
+   dashboard keeps talking to its local anonymous listener and now receives real house
+   data — verified end to end: a message published on Node 01 arrives at an anonymous
+   subscriber on Node 02, and the dashboard logs `mqtt_bridge.connected subscribed=home/#`.
+
+   **Still worth doing properly:** any *other* Python agent deployed from this repo
+   has the same gap. `MQTT_USERNAME` / `MQTT_PASSWORD` now exist in `.env.example`
+   (they never did before, despite `mosquitto.conf` naming them), so agents can be
+   pointed straight at Node 01. `BerkeleyDashboard` itself still needs those two
+   fields adding to `dashboard/config.py` if you ever want it to connect directly.
 4. **Address map** — `.175`–`.183` is dense, check before assigning:
 
    | Address | Host |

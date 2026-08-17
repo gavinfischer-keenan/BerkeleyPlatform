@@ -146,11 +146,27 @@ Host and container userspace driver versions must match (both 595.80).
 on the mesh is what lets Node 02 run standalone. When Node 01 is up, either bridge the
 two or repoint the dashboard.
 
-> ⚠️ **Blocks Node 01:** `BerkeleyDashboard`'s `Settings` class has no MQTT username or
-> password field, but `services/mosquitto/mosquitto.conf` sets `allow_anonymous false`.
-> **As written, the dashboard cannot authenticate to the platform broker.** Node 02's
-> broker permits anonymous access only because its listener is bound to a bridge with
-> no uplink.
+**The bridge to Node 01.** `BerkeleyDashboard`'s `Settings` class has no MQTT username
+or password field, but `services/mosquitto/mosquitto.conf` sets `allow_anonymous false`
+— so as written the dashboard cannot authenticate to the platform broker. Rather than
+change the dashboard, CT 103 runs an authenticated bridge:
+
+```
+Node 01 broker (192.168.4.181:1883, auth required)
+        │  user "node02"  ── topic home/#   in ──►
+        │                 ◄── topic node02/# out ──
+CT 103 mosquitto (10.20.0.40:1883, anonymous, no uplink)
+        │
+        └──► berkeley-dash reads home/# anonymously, unchanged
+```
+
+Config lives at `/etc/mosquitto/conf.d/bridge-node01.conf`, mode 600 — the credential
+is deliberately not in this repository. Verified end to end: a message published on
+Node 01 reaches an anonymous subscriber on Node 02, and the dashboard reports
+`mqtt_bridge.connected subscribed=home/#`.
+
+Anonymous access on CT 103 is acceptable only because that listener is bound to
+`vmbr1`, which has no uplink. Do not move it to `vmbr0`.
 
 ---
 

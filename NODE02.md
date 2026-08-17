@@ -142,11 +142,11 @@ configured** — everything is in one house.
 
 ## 9. Open items
 
-- **`BerkeleyDashboard` cannot authenticate to MQTT — CONFIRMED live against Node 01
-  at 192.168.4.181, which answers `Connection Refused: not authorised`.** Its `Settings` has no
-  username/password field, but the platform's broker sets `allow_anonymous false`.
-  They cannot talk as written. Node 02's broker allows anonymous *only* because the
-  mesh has no uplink. **Needs a code change before Node 01's broker goes up.**
+- **`BerkeleyDashboard` still has no MQTT credential fields** — worked around, not
+  fixed. CT 103 now runs an authenticated bridge to Node 01 (`bridge-node01.conf`,
+  mode 600, `node02` account) mirroring `home/#` down, so the dashboard reads real
+  data anonymously from the local broker. Adding `mqtt_username` / `mqtt_password` to
+  `dashboard/config.py` remains the proper fix.
 - **`BerkeleyDashboard` crash-loops without a broker** rather than retrying
   (`mqtt_bridge.start()` → `paho.connect()` → `gaierror`). Also a code change.
 - **No offsite backup.** One machine, one house.
