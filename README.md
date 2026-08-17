@@ -117,9 +117,19 @@ docker compose up -d frigate
 
 ## MQTT Topic Reference
 
-See [MQTT_TOPICS.md](MQTT_TOPICS.md) for the complete topic schema.
-
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Full system architecture and node topology
+- [NODE02.md](NODE02.md) — Node 02 compute node deployment and topology
+- [STATUS.md](STATUS.md) — Current system status and live service matrix
+- [HARDWARE.md](HARDWARE.md) — Hardware inventory and pinouts
 - [MQTT_TOPICS.md](MQTT_TOPICS.md) — Canonical MQTT topic reference
+- [CONFIG.md](CONFIG.md) — Configuration guide and environment variables
+- [DECISIONS.md](DECISIONS.md) — Architecture decision records (ADRs)
+
+## Automated Tests
+
+Run the platform test suite:
+```bash
+pytest -v
+```
