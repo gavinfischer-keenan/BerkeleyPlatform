@@ -143,12 +143,25 @@ container allocations against 30GB usable.
 - [ ] Register domain `mosswood.science`
 - [ ] Configure router port forwarding (80/443 → nginx)
 
-## 📋 To Do — Hardware (Day 2: Monday)
+## ✅ Coral USB TPU — done 2026-08-17
 
-- [ ] Plug in Coral USB TPU to Node 01
-- [ ] Verify with `lsusb | grep Google`
-- [ ] Pass through to Frigate container
-- [ ] Update Frigate config to use EdgeTPU detector
+- [x] Plugged in to Node 01
+- [x] Verified: enumerates `18d1:9302 Google Inc.` at 5000 Mbps once firmware
+      loads. It shows as `1a6e:089a` at 480 Mbps beforehand — that is the
+      bootloader, not a bad port, so `lsusb | grep Google` returns nothing until
+      something has loaded the runtime once.
+- [x] Passed through to Frigate as the whole `/dev/bus/usb` bus — the device path
+      changes on re-enumeration, so a pinned node would break.
+- [x] Frigate configured with the `edgetpu` detector: reports `TPU found`,
+      ~10 ms inference, and publishes `frigate/available online`.
+- [ ] **Cameras.** Detection and recording stay disabled until they exist.
+- [ ] **Somewhere to record to.** `/mnt/surveillance/frigate` is a directory on
+      the 94 GB root filesystem, not a 4 TB drive. Mount real storage there
+      before enabling recording, or it will fill the Proxmox host root.
+
+> The accelerator is single-tenant — one process may hold it, and that is
+> Frigate. Anything else wanting object detections should subscribe to
+> `frigate/#` on MQTT rather than trying to open the device.
 
 ## 📋 To Do — Software (Post-Node 01 Online)
 
