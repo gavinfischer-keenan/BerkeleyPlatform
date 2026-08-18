@@ -1,0 +1,78 @@
+# Frigate — Node 01 (Dell OptiPlex, i7-8700 + UHD 630 + Coral USB TPU)
+#
+# Standby configuration: the Coral and Quick Sync are wired up and verified,
+# but no cameras exist yet, so detection and recording are off. Adding a camera
+# is the only change needed to go live — see the commented block at the bottom.
+
+mqtt:
+  enabled: true
+  host: 192.168.4.181
+  port: 1883
+  topic_prefix: frigate
+  client_id: frigate
+  # Broker sets allow_anonymous false. Frigate substitutes any env var whose
+  # name begins with FRIGATE_, so the credential stays out of this repository.
+  user: sensors
+  password: "{FRIGATE_MQTT_PASSWORD}"
+
+# ── Detection: Google Coral USB Accelerator ──────────────────────────────────
+# Verified 2026-08-17: enumerates as 18d1:9302 on USB 3 at 5000 Mbps once the
+# runtime uploads its firmware. Before that it appears as 1a6e:089a at 480 Mbps
+# on the USB 2 bus — that is the bootloader, not a bad port.
+#
+# The USB accelerator is single-tenant: exactly one process may hold it. Frigate
+# owns it. Nothing else on this node should open /dev/bus/usb for the TPU.
+detectors:
+  coral:
+    type: edgetpu
+    device: usb
+
+# ── Hardware decode: Intel Quick Sync on UHD 630 ─────────────────────────────
+# CoffeeLake GT2 is Gen9.5, which the iHD driver covers. The legacy i965 driver
+# was specified originally and is wrong for this generation.
+ffmpeg:
+  hwaccel_args: preset-vaapi
+
+# ── Off until cameras arrive ─────────────────────────────────────────────────
+# Recording is deliberately disabled: /mnt/surveillance/frigate is a plain
+# directory on the 94 GB root filesystem, not the 4 TB surveillance drive the
+# architecture assumes. Enabling recording now would fill the host root.
+detect:
+  enabled: false
+
+record:
+  enabled: false
+  retain:
+    days: 7
+    mode: motion
+
+snapshots:
+  enabled: false
+  retain:
+    default: 14
+
+objects:
+  track:
+    - person
+    - car
+    - dog
+    - cat
+
+cameras: {}
+# When the first camera is mounted, replace the empty map above with e.g.:
+#
+# cameras:
+#   driveway:
+#     enabled: true
+#     ffmpeg:
+#       inputs:
+#         - path: rtsp://user:{FRIGATE_RTSP_PASSWORD}@192.168.4.x:554/stream1
+#           roles: [detect, record]
+#     detect:
+#       enabled: true
+#       width: 1280
+#       height: 720
+#       fps: 5
+#
+# ...and flip detect/record/snapshots to enabled: true once the 4 TB drive is
+# mounted at /mnt/surveillance.

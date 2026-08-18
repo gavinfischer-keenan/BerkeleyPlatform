@@ -59,7 +59,9 @@ services:
     environment:
       FRIGATE_RTSP_PASSWORD: ${FRIGATE_RTSP_PASSWORD}
       # Enable Intel Quick Sync hardware decoding via VAAPI
-      LIBVA_DRIVER_NAME: i965
+      # UHD 630 (CoffeeLake GT2, Gen9.5) needs iHD; i965 is the legacy driver
+      LIBVA_DRIVER_NAME: iHD
+      FRIGATE_MQTT_PASSWORD: ${FRIGATE_MQTT_PASSWORD}
     devices:
       # Intel Quick Sync Video — hardware decode/encode via VAAPI
       - /dev/dri/renderD128:/dev/dri/renderD128
