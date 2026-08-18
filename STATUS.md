@@ -109,11 +109,13 @@ container allocations against 30GB usable.
 - [x] Seagate 7.3TB reformatted ext4 as `bulk`; nightly vzdump 7 daily/4 weekly + pg_dump
 
 ### Hardware
-- [x] Node 01 (Dell OptiPlex) upgraded: 64GB DDR4, 2TB M.2 NVMe, 1TB internal SSD
+- [x] Node 01 (Dell OptiPlex): **32GB DDR4-2400** (2x16GB, 2 slots free, 64GB max)
+      and a single **1TB SSD** (96GB root + 816GB LVM-thin). The 64GB / 2TB NVMe
+      figures previously here were aspirational, not installed.
 - [x] Node 02 hardware ordered: 2×32GB DDR5, Samsung 990 Pro 2TB, Samsung 9100 Pro 2TB
 - [x] UPS purchased: CyberPower CP1500PFCLCD PFC Sinewave
 - [x] 2.5GbE switch purchased
-- [x] Coral USB TPU ordered (arriving Monday / Day 2)
+- [x] Coral USB TPU installed and working in Frigate (2026-08-17)
 - [x] Raspberry Shake verified online at `rs.local`
 
 ### Software — Backend Architecture Overhaul (2026-08-16)
