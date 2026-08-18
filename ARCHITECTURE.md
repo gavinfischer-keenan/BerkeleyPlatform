@@ -106,14 +106,31 @@ Node 02 blocks on Node 01 existing.
 Running on Proxmox VE 9.2.2 at `192.168.4.181`. Everything except Home Assistant
 runs as Docker on the host rather than in LXC.
 
-| Container/VM | Type | Purpose | State |
-|-------------|------|---------|-------|
-| `haos` | VM | Home Assistant OS (master state machine) | running |
-| `berkeley-mosquitto` | Docker | MQTT broker, `1883` + `9001`, auth required | running |
-| `berkeley-influxdb` | Docker | Time-series DB, `8086` | running |
-| `berkeley-frigate` | Docker | NVR + **Coral TPU** object detection, `5000` | running, standby |
-| `berkeley-whisper` | Docker | Faster-Whisper `tiny-int8`, `10300` | running |
-| `berkeley-wakeword` | Docker | openWakeWord, `10400` | running |
+| Container/VM | Type | Ceiling | Purpose | State |
+|-------------|------|---------|---------|-------|
+| `haos` | VM | 6 GB / 4 vCPU | Home Assistant OS (master state machine) | running |
+| `berkeley-mosquitto` | Docker | 512 MB | MQTT broker, `1883` + `9001`, auth required | running |
+| `berkeley-influxdb` | Docker | 4 GB | Time-series DB, `8086` | running |
+| `berkeley-frigate` | Docker | 8 GB, 512 MB shm | NVR + **Coral TPU** object detection, `5000` | running, standby |
+| `berkeley-whisper` | Docker | 2 GB | Faster-Whisper `tiny-int8`, `10300` | running |
+| `berkeley-wakeword` | Docker | 512 MB | openWakeWord, `10400` | running |
+
+**21 GB of ceilings against 32 GB**, leaving ~10 GB headroom. Actual usage is
+around 830 MiB across all five containers — these are runaway backstops, not
+working figures. Until 2026-08-17 every container ran *unlimited*, meaning any
+one of them could have exhausted the host and taken the Home Assistant VM with
+it.
+
+Sizing rationale: Frigate is the only service that genuinely grows, since
+detection, ffmpeg decode and recording all scale with camera count, and its shm
+needs roughly 100 MB per 1080p camera. InfluxDB grows with cardinality once the
+sensor fleet publishes. Whisper's headroom exists so moving from `tiny-int8` to
+`base` or `small` is a one-word change. Mosquitto is already bounded by
+`max_queued_messages`.
+
+**CPU is deliberately left unbounded.** Memory exhaustion kills a host; CPU
+contention only slows it, and Frigate benefits from bursting across all 12
+threads during detection.
 | `nginx` | — | Reverse proxy | not deployed |
 
 **32 GB of RAM** as of 2026-08-17 (2 × 16 GB DDR4-2400 in DIMM1/DIMM2; two slots

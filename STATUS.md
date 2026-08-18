@@ -76,7 +76,9 @@ Two faults the reboot exposed, both fixed, both worth knowing about:
 - [ ] **Replace the CR2032 CMOS battery in Node 01.** It is an eight-year-old
       OptiPlex. Left alone it will lose its clock on every power cycle, which
       breaks TLS, apt and any correlation between node logs.
-- [ ] **Raise Node 01 container ceilings.** They were sized for 16 GB.
+- [x] **Node 01 container ceilings set 2026-08-17.** There were none to raise —
+      every container ran unlimited. Now 21 GB of ceilings against 32 GB, with
+      the HA VM lifted 3 GB/2 vCPU to 6 GB/4 vCPU. See ARCHITECTURE.md.
 
 ### Node 02 hardware — what is actually installed
 
