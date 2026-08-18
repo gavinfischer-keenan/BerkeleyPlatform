@@ -9,6 +9,12 @@ services:
     image: eclipse-mosquitto:2
     container_name: berkeley-mosquitto
     restart: unless-stopped
+    # Broker runs as its own uid rather than root; the data and log paths below
+    # are owned 1883:1883 on the host.
+    user: "1883:1883"
+    # Bounded by max_queued_messages (2000) in mosquitto.conf, so this is a
+    # backstop against a runaway publisher, not a working figure. Uses ~3 MiB.
+    mem_limit: 512m
     labels:
       - "node=node01"
     ports:
@@ -28,6 +34,9 @@ services:
     image: influxdb:2.7
     container_name: berkeley-influxdb
     restart: unless-stopped
+    # Grows with cardinality once the sensor fleet is publishing. 4 GB is ample
+    # for this workload and still leaves the host room if a query goes wide.
+    mem_limit: 4g
     labels:
       - "node=node01"
     ports:
@@ -55,7 +64,12 @@ services:
     labels:
       - "node=node01"
     privileged: true          # required for Coral USB + DRI device access
-    shm_size: "256mb"         # increased for multi-camera Intel Quick Sync decode buffer
+    # Frigate is the one service here that can genuinely grow: detection,
+    # ffmpeg decode buffers and recording all scale with camera count.
+    mem_limit: 8g
+    # shm holds decoded frames. Frigate needs roughly 100 MB per 1080p camera,
+    # so 512 MB covers the five cameras in HARDWARE.md with margin.
+    shm_size: "512mb"
     environment:
       FRIGATE_RTSP_PASSWORD: ${FRIGATE_RTSP_PASSWORD}
       # Enable Intel Quick Sync hardware decoding via VAAPI
@@ -78,6 +92,41 @@ services:
       - "5000:5000"     # Frigate web UI
       - "8554:8554"     # RTSP re-streams
     depends_on: [mosquitto]
+
+  # ── Wyoming Voice Pipeline ───────────────────────────────────────────────────
+  # Speech-to-text and wake word for Home Assistant's Assist pipeline. Both were
+  # running on Node 01 but existed nowhere but that machine until 2026-08-17.
+  wyoming-whisper:
+    image: rhasspy/wyoming-whisper:latest
+    container_name: berkeley-whisper
+    restart: unless-stopped
+    labels:
+      - "node=node01"
+    # tiny-int8 needs ~250 MiB. Headroom here is deliberate: moving up to the
+    # base or small model is a one-word change to command: below.
+    mem_limit: 2g
+    security_opt:
+      - apparmor:unconfined
+    command: --model tiny-int8 --language en
+    ports:
+      - "10300:10300"
+    volumes:
+      - /opt/berkeley/wyoming/whisper-data:/data
+
+  wyoming-openwakeword:
+    image: rhasspy/wyoming-openwakeword:latest
+    container_name: berkeley-wakeword
+    restart: unless-stopped
+    labels:
+      - "node=node01"
+    # Small fixed models, ~21 MiB resident.
+    mem_limit: 512m
+    security_opt:
+      - apparmor:unconfined
+    ports:
+      - "10400:10400"
+    volumes:
+      - /opt/berkeley/wyoming/wakeword-data:/data
 
   # ══════════════════════════════════════════════════════════════════════════════
   # AI AGENTS — Node 01 Control Plane
