@@ -101,18 +101,56 @@ Node 02 blocks on Node 01 existing.
 
 ## Deployment Topology
 
-### Node 01 Services
+### Node 01 Services — as built 2026-08-17
 
-| Container/VM | Type | Resources | Purpose |
-|-------------|------|-----------|--------|
-| `haos` | VM | 4 vCPU, 4GB RAM, 32GB disk | Home Assistant OS (Master state machine) |
-| `mosquitto` | LXC | 1 vCPU, 512MB | MQTT Broker (Central bus) |
-| `influxdb` | LXC | 2 vCPU, 4GB, 500GB on data SSD | Time-series DB |
-| `frigate` | Docker | 2 vCPU, 6GB, QuickSync → Coral Day 2 | NVR |
-| `wyoming` | LXC | 2 vCPU, 2GB | Voice Pipeline (openWakeWord + Faster-Whisper) |
-| `nginx` | LXC | 1 vCPU, 512MB | Reverse proxy (routes internal/public traffic) |
-| overhead | - | ~6GB | Proxmox + ZFS ARC |
-| headroom | - | ~41GB | Future services |
+Running on Proxmox VE 9.2.2 at `192.168.4.181`. Everything except Home Assistant
+runs as Docker on the host rather than in LXC.
+
+| Container/VM | Type | Purpose | State |
+|-------------|------|---------|-------|
+| `haos` | VM | Home Assistant OS (master state machine) | running |
+| `berkeley-mosquitto` | Docker | MQTT broker, `1883` + `9001`, auth required | running |
+| `berkeley-influxdb` | Docker | Time-series DB, `8086` | running |
+| `berkeley-frigate` | Docker | NVR + **Coral TPU** object detection, `5000` | running, standby |
+| `berkeley-whisper` | Docker | Faster-Whisper `tiny-int8`, `10300` | running |
+| `berkeley-wakeword` | Docker | openWakeWord, `10400` | running |
+| `nginx` | — | Reverse proxy | not deployed |
+
+> ⚠️ **16 GB of RAM, not 64.** The upgrade kit has not arrived, so the resource
+> ceilings above were sized conservatively. Storage is a single 1 TB SSD: 96 GB
+> root plus an 816 GB LVM-thin pool. **There is no 4 TB surveillance drive** —
+> it was never purchased.
+
+#### Google Coral USB Accelerator
+
+Attached to Node 01 on 2026-08-17 and verified end to end. Frigate reports
+`TPU found` and the API shows `detectors.coral` with ~10 ms inference.
+
+**The device enumerates twice, and this confuses people.** Before its firmware
+is uploaded it appears as `1a6e:089a Global Unichip` at 480 Mbps on the USB 2
+bus — that is the bootloader, *not* a bad port. Once any process loads the
+EdgeTPU runtime it re-enumerates as `18d1:9302 Google Inc.` at 5000 Mbps on
+USB 3. Because the bus path changes, the compose file passes `/dev/bus/usb`
+wholesale; pinning a specific device node would break on every re-enumeration.
+
+**The TPU is single-tenant.** Exactly one process may hold the USB accelerator.
+Frigate owns it, and nothing else on this node should open it. Other services
+consume Frigate's *output* over MQTT (`frigate/#`) rather than the device —
+that is the correct pattern, and it is how Home Assistant should ingest
+detections via the Frigate integration.
+
+**Quick Sync** decode uses `LIBVA_DRIVER_NAME=iHD`. UHD 630 is CoffeeLake GT2,
+Gen9.5; the `i965` driver originally specified is the legacy Gen8-and-earlier
+driver.
+
+**Detection and recording are deliberately disabled** until cameras exist *and*
+somewhere to record them exists. `/mnt/surveillance/frigate` is currently a
+plain directory on the 94 GB root filesystem, so enabling recording would fill
+the Proxmox host root. Mount real storage there before flipping it on.
+
+`/config` is a writable directory at `/opt/berkeley/frigate`, not a read-only
+file mount — Frigate keeps its database, model cache and migrated config there.
+`services/frigate/config.yml` in this repo is the template, seeded on deploy.
 
 ### Node 02 Services — as built 2026-08-16
 
