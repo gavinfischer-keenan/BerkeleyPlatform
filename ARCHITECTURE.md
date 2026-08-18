@@ -116,10 +116,29 @@ runs as Docker on the host rather than in LXC.
 | `berkeley-wakeword` | Docker | openWakeWord, `10400` | running |
 | `nginx` | — | Reverse proxy | not deployed |
 
-> ⚠️ **16 GB of RAM, not 64.** The upgrade kit has not arrived, so the resource
-> ceilings above were sized conservatively. Storage is a single 1 TB SSD: 96 GB
-> root plus an 816 GB LVM-thin pool. **There is no 4 TB surveillance drive** —
-> it was never purchased.
+**32 GB of RAM** as of 2026-08-17 (2 × 16 GB DDR4-2400 in DIMM1/DIMM2; two slots
+free, board maximum 64 GB). The conservative ceilings above date from when this
+box had 16 GB and can now be raised. Storage is a single 1 TB SSD: 96 GB root
+plus an 816 GB LVM-thin pool. **There is no 4 TB surveillance drive** — it was
+never purchased.
+
+> ⚠️ **The LAN address must stay in `/etc/network/interfaces`.** Until
+> 2026-08-17 this host answered on `192.168.4.181`, but that address had only
+> ever been set at runtime and was never written to disk. The memory-upgrade
+> reboot therefore reverted it to the Proxmox installer default,
+> `192.168.100.2/24` with gateway `192.168.100.1` — an address nothing else on
+> the LAN can route to, and a gateway that does not exist, so the host came back
+> with no network and no internet. It is now persisted correctly, with
+> `192.168.100.2` retained as a secondary so the installer-default path still
+> works from Node 02. A DHCP reservation in the router does **not** help here:
+> this host is statically configured and never asks for a lease.
+
+> ⚠️ **The CMOS battery is dead or dying.** After the same reboot the RTC read
+> `2022-05-19` and the timezone had reverted to `America/Adak`. The system clock
+> was four months behind and could not correct itself, because NTP was
+> unreachable with the wrong gateway. Both are fixed and the RTC has been
+> written back, but a host that loses its clock on every power cycle will break
+> TLS, apt and log correlation. Replace the CR2032.
 
 #### Google Coral USB Accelerator
 

@@ -55,6 +55,29 @@ Five things found during that build that **change what you do on Node 01**:
    `paho.connect()` synchronously and dies on `gaierror`. Any agent you deploy on
    Node 01 before the broker exists will do the same.
 
+### Node 01 memory upgrade — done 2026-08-17
+
+Now **32 GB** (2 × 16 GB DDR4-2400, DIMM1/DIMM2). Two slots free, board maximum
+64 GB. Everything came back on its own: all five containers, the HA VM, and the
+Coral, which Frigate reacquired after one automatic retry.
+
+Two faults the reboot exposed, both fixed, both worth knowing about:
+
+- **The host came back on `192.168.100.2` with no LAN and no internet.** Its
+  `192.168.4.181` address had only ever been set at runtime and was never in
+  `/etc/network/interfaces`, so the reboot reverted it to the Proxmox installer
+  default — including gateway `192.168.100.1`, which does not exist. Now
+  persisted properly. **A router DHCP reservation does not protect against this**;
+  the host is static and never asks for a lease.
+- **The clock was four months behind and the RTC read 2022.** The timezone had
+  also reverted to `America/Adak`. Fixed and written back to hardware, but a
+  dying CMOS battery is the likely cause — see below.
+
+- [ ] **Replace the CR2032 CMOS battery in Node 01.** It is an eight-year-old
+      OptiPlex. Left alone it will lose its clock on every power cycle, which
+      breaks TLS, apt and any correlation between node logs.
+- [ ] **Raise Node 01 container ceilings.** They were sized for 16 GB.
+
 ### Node 02 hardware — what is actually installed
 
 | | Planned | Actual |
