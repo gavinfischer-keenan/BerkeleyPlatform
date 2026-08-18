@@ -42,9 +42,16 @@ detect:
 
 record:
   enabled: false
+  # Frigate 0.16 dropped retain.mode; retain now takes days only, and alert /
+  # detection retention is configured separately.
   retain:
     days: 7
-    mode: motion
+  alerts:
+    retain:
+      days: 30
+  detections:
+    retain:
+      days: 30
 
 snapshots:
   enabled: false

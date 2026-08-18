@@ -68,7 +68,9 @@ services:
       # Google Coral USB TPU — object detection inference
       - /dev/bus/usb:/dev/bus/usb
     volumes:
-      - ./services/frigate/config.yml:/config/config.yml:ro
+      # /config must be writable: Frigate keeps its database, model cache and
+      # migrated config here. The repo copy is the template, seeded on deploy.
+      - /opt/berkeley/frigate:/config
       # 4 TB Surveillance HDD — recordings, clips, snapshots
       - /mnt/surveillance/frigate:/media/frigate
       - /etc/localtime:/etc/localtime:ro
